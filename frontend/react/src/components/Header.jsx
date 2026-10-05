@@ -1,45 +1,25 @@
-import {
-  Link,
-  useLocation,
-} from "react-router-dom";
-
+import { Link, useLocation } from "react-router-dom";
 
 function Header() {
   const location = useLocation();
 
   return (
     <header className="site-header">
-
-      <Link
-        to="/"
-        className="brand"
-      >
-
-        <span className="brand-mark">
-          ✦
-        </span>
+      <Link to="/" className="brand">
+        <span className="brand-mark">✦</span>
 
         <span className="brand-text">
+          <strong>JewelMatch</strong>
 
-          <strong>
-            JewelMatch
-          </strong>
-
-          <small>
-            AI
-          </small>
-
+          <small>AI</small>
         </span>
-
       </Link>
 
-
       <nav className="header-navigation">
-
         <Link
           to="/catalogue"
           className={`nav-button secondary ${
-            location.pathname === "/catalogue"
+            location.pathname === "/catalogue" || location.pathname === "/"
               ? "active"
               : ""
           }`}
@@ -47,23 +27,17 @@ function Header() {
           Catalogue
         </Link>
 
-
         <Link
-          to="/add-jewellery"
+          to="/management"
           className={`nav-button primary ${
-            location.pathname === "/add-jewellery"
-              ? "active"
-              : ""
+            location.pathname === "/management" ? "active" : ""
           }`}
         >
-          Add Jewellery
+          Management
         </Link>
-
       </nav>
-
     </header>
   );
 }
-
 
 export default Header;

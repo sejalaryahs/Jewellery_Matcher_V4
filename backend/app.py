@@ -1648,6 +1648,532 @@ def add_jewellery_compatibility():
 
 
 # ============================================================
+# UPDATE JEWELLERY ITEM
+# ============================================================
+
+def update_jewellery_item(item_id):
+
+    new_local_path = None
+    new_gridfs_id = None
+
+    try:
+
+        mongo_collection = (
+            get_catalogue_collection()
+        )
+
+        # ----------------------------------------------------
+        # FIND EXISTING ITEM
+        # ----------------------------------------------------
+
+        existing_item = (
+            mongo_collection
+            .find_one(
+                {
+                    "id": item_id
+                }
+            )
+        )
+
+        if not existing_item:
+
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Jewellery not found.",
+                }
+            ), 404
+
+        # ----------------------------------------------------
+        # READ FORM DATA
+        # ----------------------------------------------------
+
+        name = (
+            request.form
+            .get(
+                "name",
+                ""
+            )
+            .strip()
+        )
+
+        collection_value = (
+            request.form
+            .get(
+                "collection",
+                ""
+            )
+            .strip()
+        )
+
+        jewellery_type = (
+            request.form
+            .get(
+                "type",
+                ""
+            )
+            .strip()
+        )
+
+        description = (
+            request.form
+            .get(
+                "description",
+                ""
+            )
+            .strip()
+        )
+
+        # ----------------------------------------------------
+        # VALIDATE NAME
+        # ----------------------------------------------------
+
+        if not name:
+
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Please enter the jewellery name.",
+                    "error": "Jewellery name is required.",
+                }
+            ), 400
+
+        # ----------------------------------------------------
+        # VALIDATE COLLECTION
+        # ----------------------------------------------------
+
+        collection = (
+            normalize_collection(
+                collection_value
+            )
+        )
+
+        if not collection:
+
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Please select a collection.",
+                    "error": "Collection must be Gold or Prototype.",
+                }
+            ), 400
+
+        # ----------------------------------------------------
+        # VALIDATE TYPE
+        # ----------------------------------------------------
+
+        if not jewellery_type:
+
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Please select a jewellery type.",
+                    "error": "Jewellery type is required.",
+                }
+            ), 400
+
+        if jewellery_type not in VALID_JEWELLERY_TYPES:
+
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Invalid jewellery type.",
+                    "error": "Please select a valid jewellery type.",
+                }
+            ), 400
+
+        # ----------------------------------------------------
+        # CHECK WHETHER A NEW IMAGE WAS PROVIDED
+        # ----------------------------------------------------
+
+        image_file = request.files.get("image")
+        has_new_image = bool(
+            image_file and image_file.filename
+        )
+
+        if has_new_image and not allowed_file(
+            image_file.filename
+        ):
+
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "Unsupported image format.",
+                    "error": "Use JPG, JPEG, PNG, WEBP or BMP.",
+                }
+            ), 400
+
+        old_collection = get_item_collection(
+            existing_item
+        )
+
+        old_filename = get_item_filename(
+            existing_item
+        )
+
+        old_local_path = None
+
+        if old_collection and old_filename:
+
+            if old_collection == "gold":
+                old_directory = GOLD_DIR
+            else:
+                old_directory = PROTOTYPE_DIR
+
+            old_local_path = (
+                old_directory
+                / old_filename
+            )
+
+        # ----------------------------------------------------
+        # BASIC UPDATE DATA
+        # ----------------------------------------------------
+
+        update_data = {
+            "name": name,
+            "collection": VALID_COLLECTIONS[collection],
+            "type": jewellery_type,
+            "description": description,
+        }
+
+        # ====================================================
+        # IMAGE UPDATE
+        # ====================================================
+
+        if has_new_image:
+
+            original_filename = secure_filename(
+                image_file.filename
+            )
+
+            if not original_filename:
+
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "Invalid image filename.",
+                        "error": "Invalid image filename.",
+                    }
+                ), 400
+
+            if collection == "gold":
+                target_directory = GOLD_DIR
+            else:
+                target_directory = PROTOTYPE_DIR
+
+            target_directory.mkdir(
+                parents=True,
+                exist_ok=True
+            )
+
+            new_local_path = (
+                target_directory
+                / original_filename
+            )
+
+            if new_local_path.exists():
+
+                stem = new_local_path.stem
+                suffix = new_local_path.suffix
+                counter = 1
+
+                while new_local_path.exists():
+
+                    new_filename = (
+                        f"{stem}_{counter}{suffix}"
+                    )
+
+                    new_local_path = (
+                        target_directory
+                        / new_filename
+                    )
+
+                    counter += 1
+
+                original_filename = new_local_path.name
+
+            # ------------------------------------------------
+            # READ IMAGE ONCE
+            # ------------------------------------------------
+
+            image_file.stream.seek(0)
+
+            image_bytes = image_file.read()
+
+            if not image_bytes:
+
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "Uploaded image is empty.",
+                        "error": "Uploaded image is empty.",
+                    }
+                ), 400
+
+            # ------------------------------------------------
+            # SAVE NEW LOCAL IMAGE
+            # ------------------------------------------------
+
+            with open(
+                new_local_path,
+                "wb"
+            ) as output_file:
+
+                output_file.write(
+                    image_bytes
+                )
+
+            print(
+                "Updated image saved locally:",
+                new_local_path
+            )
+
+            # ------------------------------------------------
+            # SAVE NEW IMAGE TO GRIDFS
+            # ------------------------------------------------
+
+            fs = get_gridfs()
+
+            content_type = (
+                image_file.content_type
+                or "application/octet-stream"
+            )
+
+            new_gridfs_id = fs.put(
+                image_bytes,
+                filename=original_filename,
+                content_type=content_type,
+                collection=collection,
+                jewellery_id=item_id,
+                uploaded_at=datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            )
+
+            print(
+                "Updated image stored in GridFS:",
+                new_gridfs_id
+            )
+
+            update_data.update(
+                {
+                    "image": original_filename,
+                    "filename": original_filename,
+                    "image_path": str(new_local_path),
+                    "image_gridfs_id": new_gridfs_id,
+                    "ai_status": "pending",
+                    "ai_queued_at": datetime.now(
+                        timezone.utc
+                    ).isoformat(),
+                }
+            )
+
+        # ====================================================
+        # SAVE MONGODB UPDATE
+        # ====================================================
+
+        result = (
+            mongo_collection
+            .update_one(
+                {
+                    "id": item_id
+                },
+                {
+                    "$set": update_data
+                }
+            )
+        )
+
+        if result.matched_count == 0:
+
+            raise RuntimeError(
+                "Jewellery could not be updated."
+            )
+
+        # ----------------------------------------------------
+        # GET UPDATED ITEM
+        # ----------------------------------------------------
+
+        updated_item = (
+            mongo_collection
+            .find_one(
+                {
+                    "id": item_id
+                },
+                {
+                    "_id": 0
+                }
+            )
+        )
+
+        # ----------------------------------------------------
+        # CLEAN UP OLD IMAGE ONLY AFTER DB UPDATE
+        # ----------------------------------------------------
+
+        if has_new_image:
+
+            old_gridfs_id = get_gridfs_id(
+                existing_item
+            )
+
+            if old_gridfs_id:
+
+                try:
+
+                    fs = get_gridfs()
+
+                    if fs.exists(old_gridfs_id):
+
+                        fs.delete(old_gridfs_id)
+
+                        print(
+                            "Deleted old GridFS image:",
+                            old_gridfs_id
+                        )
+
+                except Exception as grid_exc:
+
+                    print(
+                        "Old GridFS cleanup warning:",
+                        repr(grid_exc)
+                    )
+
+            if (
+                old_local_path
+                and old_local_path.exists()
+                and old_local_path != new_local_path
+            ):
+
+                try:
+
+                    old_local_path.unlink()
+
+                    print(
+                        "Deleted old local image:",
+                        old_local_path
+                    )
+
+                except Exception as image_exc:
+
+                    print(
+                        "Old local image cleanup warning:",
+                        repr(image_exc)
+                    )
+
+            # ------------------------------------------------
+            # START AI WORKER ONLY WHEN IMAGE CHANGED
+            # ------------------------------------------------
+
+            try:
+
+                start_ai_worker()
+
+                print(
+                    "AI worker checked after jewellery image update."
+                )
+
+            except Exception as worker_exc:
+
+                print(
+                    "AI worker warning:",
+                    repr(worker_exc)
+                )
+
+        # ----------------------------------------------------
+        # RESPONSE
+        # ----------------------------------------------------
+
+        response_item = serialize_mongo_item(
+            updated_item
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "message": (
+                    "Jewellery updated successfully."
+                ),
+                "item": response_item,
+            }
+        ), 200
+
+    except Exception as exc:
+
+        print(
+            "Update jewellery error:",
+            repr(exc)
+        )
+
+        traceback.print_exc()
+
+        # ----------------------------------------------------
+        # CLEANUP NEW FILE IF UPDATE FAILED
+        # ----------------------------------------------------
+
+        if new_local_path:
+
+            try:
+
+                if new_local_path.exists():
+                    new_local_path.unlink()
+
+            except Exception:
+                pass
+
+        if new_gridfs_id:
+
+            try:
+
+                fs = get_gridfs()
+
+                if fs.exists(new_gridfs_id):
+                    fs.delete(new_gridfs_id)
+
+            except Exception:
+                pass
+
+        return jsonify(
+            {
+                "success": False,
+                "message": "Unable to update jewellery.",
+                "error": str(exc),
+            }
+        ), 500
+
+
+# ============================================================
+# UPDATE JEWELLERY COMPATIBILITY ROUTE
+# ============================================================
+
+@app.post(
+    "/api/jewellery/<item_id>"
+)
+def update_jewellery_compatibility(
+    item_id
+):
+
+    return update_jewellery_item(
+        item_id
+    )
+
+
+# ============================================================
+# UPDATE CATALOGUE COMPATIBILITY ROUTE
+# ============================================================
+
+@app.post(
+    "/api/catalogue/<item_id>"
+)
+def update_catalogue_item(
+    item_id
+):
+
+    return update_jewellery_item(
+        item_id
+    )
+
+
+# ============================================================
 # DELETE CATALOGUE ITEM
 # ============================================================
 

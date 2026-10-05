@@ -1,21 +1,15 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Header from "../components/Header";
 import CatalogueCard from "../components/CatalogueCard";
 
-import {
-  deleteJewellery,
-  getCatalogue,
-  rebuildIndex,
-  updateJewellery,
-} from "../services/api";
+import { getCatalogue } from "../services/api";
 
 import "../styles/catalogue.css";
 
+/* =========================================================
+   JEWELLERY TYPES
+========================================================= */
 
 const JEWELLERY_TYPES = [
   "LP",
@@ -45,925 +39,500 @@ const JEWELLERY_TYPES = [
   "GCH",
 ];
 
+/* =========================================================
+   HELPERS
+========================================================= */
 
-function getInitialForm(item) {
-  return {
-    name:
-      item?.name ||
-      item?.design_name ||
-      "",
-
-    collection:
-      item?.collection ||
-      "",
-
-    type:
-      item?.type ||
-      "",
-
-    description:
-      item?.description ||
-      "",
-  };
+function normalizeValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
+function getImageUrl(item) {
+  const value = item?.image_url || item?.image || item?.image_path || "";
+
+  if (!value) {
+    return "";
+  }
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  return `/${value}`;
+}
+
+/* =========================================================
+   CATALOGUE PAGE
+========================================================= */
 
 function CataloguePage() {
-  const [items, setItems] =
-    useState([]);
+  const [items, setItems] = useState([]);
 
-  /*
-   * These statistics represent the COMPLETE catalogue.
-   * They are intentionally independent of the selected
-   * collection filter and search term.
-   */
-  const [totalCount, setTotalCount] =
-    useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [goldCount, setGoldCount] = useState(0);
+  const [prototypeCount, setPrototypeCount] = useState(0);
 
-  const [goldCount, setGoldCount] =
-    useState(0);
+  const [collection, setCollection] = useState("all");
+  const [selectedType, setSelectedType] = useState("all");
 
-  const [prototypeCount, setPrototypeCount] =
-    useState(0);
+  const [search, setSearch] = useState("");
 
+  const [selectedItem, setSelectedItem] = useState(null);
 
-  const [collectionFilter, setCollectionFilter] =
-    useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [search, setSearch] =
-    useState("");
-
-
-  const [isLoading, setIsLoading] =
-    useState(true);
-
-  const [isRebuilding, setIsRebuilding] =
-    useState(false);
-
-
-  const [error, setError] =
-    useState("");
-
-  const [message, setMessage] =
-    useState("");
-
-
-  const [editingItem, setEditingItem] =
-    useState(null);
-
-  const [editForm, setEditForm] =
-    useState({
-      name: "",
-      collection: "",
-      type: "",
-      description: "",
-    });
-
-  const [editImage, setEditImage] =
-    useState(null);
-
-  const [isSavingEdit, setIsSavingEdit] =
-    useState(false);
-
-
-  /* ==========================================================
+  /* =======================================================
      LOAD CATALOGUE
-  ========================================================== */
-
-  async function loadCatalogue() {
-    try {
-      setIsLoading(true);
-      setError("");
-
-      /*
-       * --------------------------------------------------------
-       * REQUEST 1
-       * --------------------------------------------------------
-       * Get the items that should actually be displayed.
-       *
-       * This request respects:
-       * - collection filter
-       * - search text
-       */
-      const filteredData =
-        await getCatalogue({
-          collection:
-            collectionFilter,
-
-          search:
-            search,
-        });
-
-
-      /*
-       * --------------------------------------------------------
-       * REQUEST 2
-       * --------------------------------------------------------
-       * Get the COMPLETE catalogue.
-       *
-       * This request intentionally ignores:
-       * - collection filter
-       * - search text
-       *
-       * Therefore the statistics always represent
-       * the complete catalogue.
-       */
-      const statisticsData =
-        await getCatalogue({
-          collection: "all",
-          search: "",
-        });
-
-
-      /* --------------------------------------------------------
-         DISPLAYED ITEMS
-      -------------------------------------------------------- */
-
-      setItems(
-        filteredData?.items ||
-        []
-      );
-
-
-      /* --------------------------------------------------------
-         COMPLETE CATALOGUE STATISTICS
-      -------------------------------------------------------- */
-
-      setTotalCount(
-        statisticsData?.total_count ??
-        0
-      );
-
-      setGoldCount(
-        statisticsData?.gold_count ??
-        0
-      );
-
-      setPrototypeCount(
-        statisticsData?.prototype_count ??
-        0
-      );
-
-    } catch (loadError) {
-      console.error(
-        "Catalogue error:",
-        loadError
-      );
-
-      setError(
-        loadError.message ||
-        "Unable to load catalogue."
-      );
-
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
+  ======================================================= */
 
   useEffect(() => {
-    const timer =
-      setTimeout(
-        () => {
-          loadCatalogue();
-        },
-        250
-      );
+    let cancelled = false;
 
-    return () =>
-      clearTimeout(timer);
+    async function loadCatalogue() {
+      try {
+        setLoading(true);
+        setError("");
 
-  }, [
-    collectionFilter,
-    search,
-  ]);
-
-
-  /* ==========================================================
-     FILTERED / VISIBLE ITEMS
-  ========================================================== */
-
-  const visibleItems =
-    useMemo(
-      () => items,
-      [items]
-    );
-
-
-  /* ==========================================================
-     EDIT
-  ========================================================== */
-
-  function openEdit(item) {
-    setEditingItem(item);
-
-    setEditForm(
-      getInitialForm(item)
-    );
-
-    setEditImage(null);
-
-    setError("");
-
-    setMessage("");
-  }
-
-
-  function closeEdit() {
-    if (isSavingEdit) {
-      return;
-    }
-
-    setEditingItem(null);
-
-    setEditImage(null);
-  }
-
-
-  function handleEditChange(
-    event
-  ) {
-    const {
-      name,
-      value,
-    } = event.target;
-
-    setEditForm(
-      (current) => ({
-        ...current,
-        [name]: value,
-      })
-    );
-  }
-
-
-  async function handleSaveEdit(
-    event
-  ) {
-    event.preventDefault();
-
-    if (!editingItem) {
-      return;
-    }
-
-    try {
-      setIsSavingEdit(true);
-
-      setError("");
-
-      setMessage("");
-
-
-      const id =
-        editingItem.design_id ||
-        editingItem.id;
-
-
-      const response =
-        await updateJewellery({
-          id,
-
-          image:
-            editImage,
-
-          name:
-            editForm.name.trim(),
-
-          collection:
-            editForm.collection,
-
-          type:
-            editForm.type,
-
-          description:
-            editForm.description.trim(),
+        const response = await getCatalogue({
+          collection,
+          search,
         });
 
+        if (cancelled) {
+          return;
+        }
 
-      if (!response?.success) {
-        throw new Error(
-          response?.message ||
-          "Unable to update jewellery."
-        );
+        const catalogueItems = Array.isArray(response?.items)
+          ? response.items
+          : [];
+
+        setItems(catalogueItems);
+
+        setTotalCount(Number(response?.total_count ?? catalogueItems.length));
+
+        setGoldCount(Number(response?.gold_count ?? 0));
+
+        setPrototypeCount(Number(response?.prototype_count ?? 0));
+      } catch (err) {
+        if (!cancelled) {
+          setError(err?.message || "Unable to load the jewellery catalogue.");
+
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-
-      setMessage(
-        "Jewellery updated successfully."
-      );
-
-
-      setEditingItem(null);
-
-      setEditImage(null);
-
-
-      /*
-       * Reload both:
-       * - visible items
-       * - complete statistics
-       */
-      await loadCatalogue();
-
-    } catch (saveError) {
-      console.error(
-        "Update error:",
-        saveError
-      );
-
-      setError(
-        saveError.message ||
-        "Unable to update jewellery."
-      );
-
-    } finally {
-      setIsSavingEdit(false);
     }
+
+    loadCatalogue();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collection, search]);
+
+  /* =======================================================
+     FILTER BY TYPE
+  ======================================================= */
+
+  const filteredItems = useMemo(() => {
+    if (selectedType === "all") {
+      return items;
+    }
+
+    const selected = normalizeValue(selectedType);
+
+    return items.filter((item) => {
+      return normalizeValue(item?.type) === selected;
+    });
+  }, [items, selectedType]);
+
+  /* =======================================================
+     CLEAR FILTERS
+  ======================================================= */
+
+  function clearFilters() {
+    setCollection("all");
+    setSelectedType("all");
+    setSearch("");
   }
 
+  /* =======================================================
+     OPEN DETAILS
+  ======================================================= */
 
-  /* ==========================================================
-     DELETE
-  ========================================================== */
+  function openDetails(item) {
+    setSelectedItem(item);
 
-  async function handleDelete(
-    item
-  ) {
-    const designId =
-      item.design_id ||
-      item.id;
-
-
-    const confirmed =
-      window.confirm(
-        `Delete ${designId}? This will also remove it from the search index.`
-      );
-
-
-    if (!confirmed) {
-      return;
-    }
-
-
-    try {
-      setError("");
-
-      setMessage("");
-
-
-      await deleteJewellery(
-        designId
-      );
-
-
-      setMessage(
-        `${designId} deleted successfully.`
-      );
-
-
-      /*
-       * Reload both:
-       * - visible items
-       * - complete statistics
-       */
-      await loadCatalogue();
-
-    } catch (deleteError) {
-      console.error(
-        "Delete error:",
-        deleteError
-      );
-
-      setError(
-        deleteError.message ||
-        "Unable to delete jewellery."
-      );
-    }
+    document.body.classList.add("catalogue-overlay-open");
   }
 
+  /* =======================================================
+     CLOSE DETAILS
+  ======================================================= */
 
-  /* ==========================================================
-     REBUILD INDEX
-  ========================================================== */
+  function closeDetails() {
+    setSelectedItem(null);
 
-  async function handleRebuild() {
-    try {
-      setIsRebuilding(true);
-
-      setError("");
-
-      setMessage("");
-
-
-      await rebuildIndex();
-
-
-      setMessage(
-        "Search index rebuilt successfully."
-      );
-
-    } catch (rebuildError) {
-      console.error(
-        "Rebuild error:",
-        rebuildError
-      );
-
-      setError(
-        rebuildError.message ||
-        "Unable to rebuild search index."
-      );
-
-    } finally {
-      setIsRebuilding(false);
-    }
+    document.body.classList.remove("catalogue-overlay-open");
   }
 
+  /* =======================================================
+     ESCAPE KEY
+  ======================================================= */
 
-  /* ==========================================================
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === "Escape" && selectedItem) {
+        closeDetails();
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+
+      document.body.classList.remove("catalogue-overlay-open");
+    };
+  }, [selectedItem]);
+
+  /* =======================================================
+     SELECTED ITEM IMAGE
+  ======================================================= */
+
+  const selectedImageUrl = selectedItem ? getImageUrl(selectedItem) : "";
+
+  /* =======================================================
      RENDER
-  ========================================================== */
+  ======================================================= */
 
   return (
     <div className="catalogue-page">
-
       <Header />
 
-
       <main className="catalogue-main">
-
-        {/* ===================================================
-            HEADER
-        =================================================== */}
+        {/* =================================================
+            HEADING
+        ================================================= */}
 
         <section className="catalogue-heading">
-
           <div>
+            <span className="catalogue-eyebrow">✦ JEWELLERY COLLECTION</span>
 
-            <span className="catalogue-eyebrow">
-              ✦ Jewellery collection
-            </span>
+            <h1>Catalogue</h1>
 
-            <h1>
-              Catalogue
-            </h1>
-
-            <p>
-              Manage all jewellery designs
-              available for visual search.
-            </p>
-
+            <p>Manage all jewellery designs available for visual search.</p>
           </div>
-
-
-          <button
-            type="button"
-            className="rebuild-index-button"
-            disabled={isRebuilding}
-            onClick={handleRebuild}
-          >
-            {isRebuilding
-              ? "Rebuilding..."
-              : "↻ Rebuild Search Index"}
-          </button>
-
         </section>
 
-
-        {/* ===================================================
-            STATS
-        =================================================== */}
+        {/* =================================================
+            STATISTICS
+        ================================================= */}
 
         <section className="catalogue-statistics">
-
           <div className="catalogue-stat">
+            <span>Total Designs</span>
 
-            <span>
-              Total Designs
-            </span>
-
-            <strong>
-              {totalCount}
-            </strong>
-
+            <strong>{totalCount}</strong>
           </div>
 
-
           <div className="catalogue-stat">
+            <span>Gold</span>
 
-            <span>
-              Gold
-            </span>
-
-            <strong>
-              {goldCount}
-            </strong>
-
+            <strong>{goldCount}</strong>
           </div>
 
-
           <div className="catalogue-stat">
+            <span>Prototype</span>
 
-            <span>
-              Prototype
-            </span>
-
-            <strong>
-              {prototypeCount}
-            </strong>
-
+            <strong>{prototypeCount}</strong>
           </div>
-
         </section>
 
+        {/* =================================================
+            FILTER PANEL
+        ================================================= */}
 
-        {/* ===================================================
-            CONTROLS
-        =================================================== */}
+        <section className="catalogue-filter-panel">
+          {/* SEARCH */}
 
-        <section className="catalogue-controls">
+          <div className="catalogue-search-row">
+            <div className="catalogue-search">
+              <span className="catalogue-search-icon">⌕</span>
 
-          <div className="catalogue-search">
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by ID, name or type..."
+                aria-label="Search jewellery"
+              />
 
-            <span>
-              ⌕
-            </span>
-
-            <input
-              type="search"
-              value={search}
-              onChange={(event) =>
-                setSearch(
-                  event.target.value
-                )
-              }
-              placeholder="Search by ID, name or type..."
-            />
-
+              {search && (
+                <button
+                  type="button"
+                  className="catalogue-search-clear"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* FILTERS */}
 
-          <div className="catalogue-filters">
+          <div className="catalogue-filter-row">
+            <div className="catalogue-filter-group">
+              <span className="catalogue-filter-label">Collection</span>
 
-            {[
-              {
-                value: "all",
-                label: "All",
-              },
-
-              {
-                value: "gold",
-                label: "Gold",
-              },
-
-              {
-                value: "prototype",
-                label: "Prototype",
-              },
-            ].map(
-              (filter) => (
-
+              <div className="catalogue-collection-filters">
                 <button
-                  key={filter.value}
                   type="button"
-
-                  className={
-                    collectionFilter ===
-                    filter.value
-                      ? "active"
-                      : ""
-                  }
-
-                  onClick={() =>
-                    setCollectionFilter(
-                      filter.value
-                    )
-                  }
+                  className={collection === "all" ? "active" : ""}
+                  onClick={() => setCollection("all")}
                 >
-                  {filter.label}
+                  All
                 </button>
 
-              )
-            )}
+                <button
+                  type="button"
+                  className={collection === "gold" ? "active" : ""}
+                  onClick={() => setCollection("gold")}
+                >
+                  Gold
+                </button>
 
-          </div>
-
-        </section>
-
-
-        {/* ===================================================
-            MESSAGES
-        =================================================== */}
-
-        {error && (
-          <div className="catalogue-message error">
-            {error}
-          </div>
-        )}
-
-
-        {message && (
-          <div className="catalogue-message success">
-            {message}
-          </div>
-        )}
-
-
-        {/* ===================================================
-            LOADING / CATALOGUE
-        =================================================== */}
-
-        {isLoading ? (
-
-          <section className="catalogue-loading">
-
-            <div className="loading-spinner" />
-
-            <p>
-              Loading catalogue...
-            </p>
-
-          </section>
-
-        ) : visibleItems.length ? (
-
-          <section className="catalogue-grid">
-
-            {visibleItems.map(
-              (item) => (
-
-                <CatalogueCard
-                  key={
-                    item.design_id ||
-                    item.id
-                  }
-
-                  item={item}
-
-                  onEdit={openEdit}
-
-                  onDelete={handleDelete}
-                />
-
-              )
-            )}
-
-          </section>
-
-        ) : (
-
-          <section className="catalogue-empty">
-
-            <div>
-              ✦
+                <button
+                  type="button"
+                  className={collection === "prototype" ? "active" : ""}
+                  onClick={() => setCollection("prototype")}
+                >
+                  Prototype
+                </button>
+              </div>
             </div>
 
-            <h2>
-              No jewellery found
-            </h2>
+            <div className="catalogue-filter-group catalogue-type-filter">
+              <label
+                htmlFor="catalogue-jewellery-type"
+                className="catalogue-filter-label"
+              >
+                Jewellery Type
+              </label>
 
-            <p>
-              Try another search or collection
-              filter.
-            </p>
+              <div className="catalogue-type-select-wrapper">
+                <select
+                  id="catalogue-jewellery-type"
+                  value={selectedType}
+                  onChange={(event) => setSelectedType(event.target.value)}
+                >
+                  <option value="all">All Jewellery Types</option>
 
-          </section>
+                  {JEWELLERY_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
 
-        )}
-
-      </main>
-
-
-      {/* =====================================================
-          EDIT MODAL
-      ===================================================== */}
-
-      {editingItem && (
-
-        <div
-          className="edit-overlay"
-
-          onMouseDown={(event) => {
-
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              closeEdit();
-            }
-
-          }}
-        >
-
-          <div className="edit-modal">
-
-            <div className="edit-modal-header">
-
-              <div>
-
-                <span>
-                  Edit design
-                </span>
-
-                <h2>
-                  {editingItem.design_id ||
-                    editingItem.id}
-                </h2>
-
+                <span className="catalogue-select-arrow">▾</span>
               </div>
+            </div>
 
-
+            {(collection !== "all" ||
+              selectedType !== "all" ||
+              search.trim()) && (
               <button
                 type="button"
-                onClick={closeEdit}
-                disabled={isSavingEdit}
+                className="catalogue-clear-filters"
+                onClick={clearFilters}
               >
-                ×
+                Clear Filters
               </button>
+            )}
+          </div>
+        </section>
 
-            </div>
+        {/* =================================================
+            RESULT BAR
+        ================================================= */}
 
+        <div className="catalogue-result-bar">
+          <div>
+            <span className="catalogue-result-label">Jewellery Designs</span>
 
-            <form
-              className="edit-form"
-              onSubmit={handleSaveEdit}
-            >
-
-              {/* NAME */}
-
-              <div className="edit-form-group">
-
-                <label>
-                  Jewellery Name
-                </label>
-
-                <input
-                  name="name"
-                  value={editForm.name}
-                  onChange={
-                    handleEditChange
-                  }
-                  required
-                />
-
-              </div>
-
-
-              {/* COLLECTION */}
-
-              <div className="edit-form-group">
-
-                <label>
-                  Collection
-                </label>
-
-                <select
-                  name="collection"
-                  value={
-                    editForm.collection
-                  }
-                  onChange={
-                    handleEditChange
-                  }
-                  required
-                >
-
-                  <option value="">
-                    Select collection
-                  </option>
-
-                  <option value="Gold">
-                    Gold
-                  </option>
-
-                  <option value="Prototype">
-                    Prototype
-                  </option>
-
-                </select>
-
-              </div>
-
-
-              {/* TYPE */}
-
-              <div className="edit-form-group">
-
-                <label>
-                  Jewellery Type
-                </label>
-
-                <select
-                  name="type"
-                  value={editForm.type}
-                  onChange={
-                    handleEditChange
-                  }
-                  required
-                >
-
-                  <option value="">
-                    Select jewellery type
-                  </option>
-
-                  {JEWELLERY_TYPES.map(
-                    (jewelleryType) => (
-
-                      <option
-                        key={jewelleryType}
-                        value={jewelleryType}
-                      >
-                        {jewelleryType}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-
-              {/* DESCRIPTION */}
-
-              <div className="edit-form-group">
-
-                <label>
-                  Description
-                </label>
-
-                <textarea
-                  name="description"
-                  value={
-                    editForm.description
-                  }
-                  onChange={
-                    handleEditChange
-                  }
-                  rows={4}
-                />
-
-              </div>
-
-
-              {/* IMAGE */}
-
-              <div className="edit-form-group">
-
-                <label>
-                  Replace Image
-                </label>
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) =>
-                    setEditImage(
-                      event.target.files?.[0] ||
-                      null
-                    )
-                  }
-                />
-
-              </div>
-
-
-              {/* ACTIONS */}
-
-              <div className="edit-actions">
-
-                <button
-                  type="button"
-                  className="edit-cancel"
-                  onClick={closeEdit}
-                  disabled={isSavingEdit}
-                >
-                  Cancel
-                </button>
-
-
-                <button
-                  type="submit"
-                  className="edit-save"
-                  disabled={isSavingEdit}
-                >
-                  {isSavingEdit
-                    ? "Saving..."
-                    : "Save Changes"}
-                </button>
-
-              </div>
-
-            </form>
-
+            <strong>{filteredItems.length}</strong>
           </div>
 
+          {(collection !== "all" ||
+            selectedType !== "all" ||
+            search.trim()) && (
+            <span className="catalogue-filter-active">Filters applied</span>
+          )}
         </div>
 
-      )}
+        {/* =================================================
+            ERROR
+        ================================================= */}
 
+        {error && <div className="catalogue-message error">{error}</div>}
+
+        {/* =================================================
+            LOADING
+        ================================================= */}
+
+        {loading && (
+          <div className="catalogue-loading">
+            <div className="catalogue-loading-spinner" />
+
+            <p>Loading jewellery catalogue...</p>
+          </div>
+        )}
+
+        {/* =================================================
+            EMPTY
+        ================================================= */}
+
+        {!loading && !error && filteredItems.length === 0 && (
+          <div className="catalogue-empty-state">
+            <div className="catalogue-empty-icon">✦</div>
+
+            <h2>No jewellery found</h2>
+
+            <p>Try changing your search or filters.</p>
+
+            <button type="button" onClick={clearFilters}>
+              Clear Filters
+            </button>
+          </div>
+        )}
+
+        {/* =================================================
+            CATALOGUE CARDS
+        ================================================= */}
+
+        {!loading && filteredItems.length > 0 && (
+          <section className="catalogue-grid">
+            {filteredItems.map((item) => (
+              <CatalogueCard
+                key={item?.design_id || item?.id}
+                item={item}
+                onClick={openDetails}
+              />
+            ))}
+          </section>
+        )}
+      </main>
+
+      {/* ===================================================
+          JEWELLERY DETAILS OVERLAY
+      =================================================== */}
+
+      {selectedItem && (
+        <div
+          className="catalogue-details-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeDetails();
+            }
+          }}
+        >
+          <div
+            className="catalogue-details-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Jewellery details"
+          >
+            {/* CLOSE */}
+
+            <button
+              type="button"
+              className="catalogue-details-close"
+              onClick={closeDetails}
+              aria-label="Close jewellery details"
+            >
+              ×
+            </button>
+
+            {/* =================================================
+                IMAGE — MAIN FOCUS
+            ================================================= */}
+
+            <div className="catalogue-details-image">
+              {selectedImageUrl ? (
+                <img
+                  src={selectedImageUrl}
+                  alt={selectedItem?.name || "Jewellery"}
+                />
+              ) : (
+                <div className="catalogue-details-no-image">
+                  No image available
+                </div>
+              )}
+            </div>
+
+            {/* =================================================
+                DETAILS
+            ================================================= */}
+
+            <div className="catalogue-details-content">
+              <span className="catalogue-details-collection">
+                {selectedItem?.collection || "—"}
+              </span>
+
+              <h2>
+                {selectedItem?.name ||
+                  selectedItem?.design_name ||
+                  "Untitled Jewellery"}
+              </h2>
+
+              <div className="catalogue-details-id">
+                <span>Design ID</span>
+
+                <strong>
+                  {selectedItem?.design_id || selectedItem?.id || "—"}
+                </strong>
+              </div>
+
+              <div className="catalogue-details-info-grid">
+                <div className="catalogue-details-info">
+                  <span>Type</span>
+
+                  <strong>{selectedItem?.type || "—"}</strong>
+                </div>
+
+                <div className="catalogue-details-info">
+                  <span>Collection</span>
+
+                  <strong>{selectedItem?.collection || "—"}</strong>
+                </div>
+              </div>
+
+              {selectedItem?.description && (
+                <div className="catalogue-details-description">
+                  <span>Description</span>
+
+                  <p>{selectedItem.description}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 
 export default CataloguePage;
