@@ -71,7 +71,11 @@ function getItemDescription(item) {
 
 function ManageJewelleryPage() {
   const [items, setItems] = useState([]);
-
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    gold: 0,
+    prototype: 0,
+  });
   const [search, setSearch] = useState("");
   const [collection, setCollection] = useState("all");
 
@@ -131,7 +135,26 @@ function ManageJewelleryPage() {
       const catalogue =
         response?.items || response?.catalogue || response?.data || [];
 
-      setItems(Array.isArray(catalogue) ? catalogue : []);
+      const catalogueItems = Array.isArray(catalogue) ? catalogue : [];
+
+      setItems(catalogueItems);
+
+      setStatistics({
+        total: Number(response?.total_count) || catalogueItems.length,
+
+        gold:
+          Number(response?.gold_count) ||
+          catalogueItems.filter(
+            (item) => String(getItemCollection(item)).toLowerCase() === "gold",
+          ).length,
+
+        prototype:
+          Number(response?.prototype_count) ||
+          catalogueItems.filter(
+            (item) =>
+              String(getItemCollection(item)).toLowerCase() === "prototype",
+          ).length,
+      });
     } catch (err) {
       console.error("Failed to load jewellery:", err);
 
@@ -429,6 +452,30 @@ function ManageJewelleryPage() {
           <Link to="/add-jewellery" className="management-add-link">
             + Add Jewellery
           </Link>
+        </section>
+
+        {/* =================================================
+            KPI STATISTICS
+        ================================================= */}
+
+        <section className="catalogue-statistics management-statistics">
+          <div className="catalogue-stat">
+            <span>Total Designs</span>
+
+            <strong>{statistics.total}</strong>
+          </div>
+
+          <div className="catalogue-stat">
+            <span>Gold</span>
+
+            <strong>{statistics.gold}</strong>
+          </div>
+
+          <div className="catalogue-stat">
+            <span>Prototype</span>
+
+            <strong>{statistics.prototype}</strong>
+          </div>
         </section>
 
         {/* =================================================
