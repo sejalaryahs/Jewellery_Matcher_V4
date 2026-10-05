@@ -4126,3 +4126,77 @@ body.catalogue-overlay-open {
     background: transparent;
   }
 }
+
+/* =========================================================
+   CATALOGUE CARD IMAGE BUTTON RESET
+   Removes browser default button border/outline
+========================================================= */
+
+.catalogue-card-image-button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+
+  background: transparent;
+  box-shadow: none;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  text-align: left;
+  font: inherit;
+
+  cursor: pointer;
+}
+
+.catalogue-card-image-button:hover,
+.catalogue-card-image-button:active,
+.catalogue-card-image-button:focus {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalogue-card-image-button:focus-visible {
+  outline: none;
+}
+
+.catalogue-card-title-button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+
+  border: 0;
+  outline: 0;
+
+  background: transparent;
+  box-shadow: none;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  text-align: left;
+  font: inherit;
+
+  cursor: pointer;
+}
+
+.catalogue-card-title-button:hover,
+.catalogue-card-title-button:active,
+.catalogue-card-title-button:focus {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalogue-card-title-button:focus-visible {
+  outline: none;
+}

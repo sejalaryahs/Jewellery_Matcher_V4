@@ -18,7 +18,7 @@ function getImageUrl(item) {
   return apiUrl(`/${value}`);
 }
 
-function CatalogueCard({ item, onClick }) {
+function CatalogueCard({ item, onClick, onManage, managementMode = false }) {
   const imageUrl = getImageUrl(item);
 
   const designId = item?.design_id || item?.id || "—";
@@ -29,39 +29,79 @@ function CatalogueCard({ item, onClick }) {
 
   const type = item?.type || "—";
 
+  function handleCardClick() {
+    if (managementMode) {
+      onManage?.(item);
+      return;
+    }
+
+    onClick?.(item);
+  }
+
   return (
-    <button
-      type="button"
-      className="catalogue-card"
-      onClick={() => onClick?.(item)}
-      aria-label={`View details for ${name}`}
-    >
-      {/* IMAGE */}
+    <article className="catalogue-card">
+      {/* =================================================
+          IMAGE
+      ================================================= */}
 
-      <div className="catalogue-card-image">
-        {imageUrl ? (
-          <img src={imageUrl} alt={name} loading="lazy" />
-        ) : (
-          <div className="catalogue-no-image">No image</div>
-        )}
+      <button
+        type="button"
+        className="catalogue-card-image-button"
+        onClick={handleCardClick}
+        aria-label={`View ${name}`}
+      >
+        <div className="catalogue-card-image">
+          {imageUrl ? (
+            <img src={imageUrl} alt={name} loading="lazy" />
+          ) : (
+            <div className="catalogue-no-image">No image</div>
+          )}
 
-        <span className="catalogue-id">{designId}</span>
-      </div>
+          <span className="catalogue-id">{designId}</span>
+        </div>
+      </button>
 
-      {/* CARD DETAILS */}
+      {/* =================================================
+          CARD DETAILS
+      ================================================= */}
 
       <div className="catalogue-card-body">
-        <span className="catalogue-small-label">{collection}</span>
+        <button
+          type="button"
+          className="catalogue-card-title-button"
+          onClick={handleCardClick}
+        >
+          <span className="catalogue-small-label">{collection}</span>
 
-        <h3>{name}</h3>
+          <h3>{name}</h3>
+        </button>
 
         <div className="catalogue-card-meta">
           <span>Type</span>
 
           <strong>{type}</strong>
         </div>
+
+        {/* =================================================
+            MANAGEMENT BUTTON
+        ================================================= */}
+
+        {managementMode && (
+          <button
+            type="button"
+            className="catalogue-manage-button"
+            onClick={(event) => {
+              event.stopPropagation();
+
+              onManage?.(item);
+            }}
+          >
+            Manage
+            <span>→</span>
+          </button>
+        )}
       </div>
-    </button>
+    </article>
   );
 }
 
