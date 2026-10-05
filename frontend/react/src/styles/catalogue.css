@@ -7,7 +7,7 @@
 
   background:
     linear-gradient(rgba(250, 244, 236, 0.94), rgba(250, 244, 236, 0.99)),
-    url("/static/images/jewellery-background.jpg");
+    url("E:/sejal/Jewellery_Matcher_V3/frontend/react/src/images/jewellery-background.jpg");
 
   background-size: cover;
   background-position: center;

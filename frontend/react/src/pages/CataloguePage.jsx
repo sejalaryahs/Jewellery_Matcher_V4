@@ -74,9 +74,9 @@ function getImageUrl(item) {
 function CataloguePage() {
   const [items, setItems] = useState([]);
 
-  const [totalCount, setTotalCount] = useState(0);
-  const [goldCount, setGoldCount] = useState(0);
-  const [prototypeCount, setPrototypeCount] = useState(0);
+  // const [totalCount, setTotalCount] = useState(0);
+  // const [goldCount, setGoldCount] = useState(0);
+  // const [prototypeCount, setPrototypeCount] = useState(0);
 
   const [collection, setCollection] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
@@ -115,11 +115,11 @@ function CataloguePage() {
 
         setItems(catalogueItems);
 
-        setTotalCount(Number(response?.total_count ?? catalogueItems.length));
+        // setTotalCount(Number(response?.total_count ?? catalogueItems.length));
 
-        setGoldCount(Number(response?.gold_count ?? 0));
+        // setGoldCount(Number(response?.gold_count ?? 0));
 
-        setPrototypeCount(Number(response?.prototype_count ?? 0));
+        // setPrototypeCount(Number(response?.prototype_count ?? 0));
       } catch (err) {
         if (!cancelled) {
           setError(err?.message || "Unable to load the jewellery catalogue.");
@@ -232,30 +232,6 @@ function CataloguePage() {
             <h1>Catalogue</h1>
 
             <p>Manage all jewellery designs available for visual search.</p>
-          </div>
-        </section>
-
-        {/* =================================================
-            STATISTICS
-        ================================================= */}
-
-        <section className="catalogue-statistics">
-          <div className="catalogue-stat">
-            <span>Total Designs</span>
-
-            <strong>{totalCount}</strong>
-          </div>
-
-          <div className="catalogue-stat">
-            <span>Gold</span>
-
-            <strong>{goldCount}</strong>
-          </div>
-
-          <div className="catalogue-stat">
-            <span>Prototype</span>
-
-            <strong>{prototypeCount}</strong>
           </div>
         </section>
 
