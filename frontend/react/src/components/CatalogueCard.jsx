@@ -40,10 +40,6 @@ function CatalogueCard({ item, onClick, onManage, managementMode = false }) {
 
   return (
     <article className="catalogue-card">
-      {/* =================================================
-          IMAGE
-      ================================================= */}
-
       <button
         type="button"
         className="catalogue-card-image-button"
@@ -61,10 +57,6 @@ function CatalogueCard({ item, onClick, onManage, managementMode = false }) {
         </div>
       </button>
 
-      {/* =================================================
-          CARD DETAILS
-      ================================================= */}
-
       <div className="catalogue-card-body">
         <button
           type="button"
@@ -81,10 +73,6 @@ function CatalogueCard({ item, onClick, onManage, managementMode = false }) {
 
           <strong>{type}</strong>
         </div>
-
-        {/* =================================================
-            MANAGEMENT BUTTON
-        ================================================= */}
 
         {managementMode && (
           <button

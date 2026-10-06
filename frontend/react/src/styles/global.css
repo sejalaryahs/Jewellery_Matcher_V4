@@ -1,32 +1,84 @@
+/* ============================================================
+   JEWELMATCH — GLOBAL STYLES
+   Luxury Jewellery Catalogue
+============================================================ */
+
+:root {
+  --cream: #faf6f0;
+  --cream-soft: #f6eee4;
+  --cream-deep: #eee0ce;
+
+  --white: #fffdf9;
+  --white-soft: rgba(255, 253, 249, 0.92);
+
+  --brown: #302820;
+  --brown-soft: #5f5146;
+  --brown-muted: #81746a;
+  --brown-faint: #a1968c;
+
+  --gold: #ad7628;
+  --gold-dark: #8e5f1f;
+  --gold-light: #d8b477;
+  --gold-pale: #f0dfc5;
+
+  --border: rgba(173, 118, 40, 0.17);
+  --border-strong: rgba(173, 118, 40, 0.29);
+
+  --shadow-sm: 0 6px 18px rgba(69, 48, 29, 0.06);
+
+  --shadow-md: 0 14px 34px rgba(69, 48, 29, 0.09);
+
+  --shadow-lg: 0 26px 70px rgba(55, 38, 23, 0.14);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  --serif: Georgia, "Times New Roman", serif;
+
+  --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* ============================================================
+   RESET
+============================================================ */
+
 * {
   box-sizing: border-box;
 }
-
 
 html {
   scroll-behavior: smooth;
 }
 
-
+html,
+body,
+#root {
+  min-height: 100%;
+}
+#root {
+  min-height: 100vh;
+}
 body {
   margin: 0;
-
   min-width: 320px;
 
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--sans);
 
-  color: #2f2822;
+  color: var(--brown);
 
-  background: #faf4ec;
+  background:
+    linear-gradient(rgba(250, 246, 240, 0.78), rgba(250, 246, 240, 0.9)),
+    url("/images/jewellery-background.jpg");
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-
 
 button,
 input,
@@ -35,288 +87,327 @@ select {
   font: inherit;
 }
 
-
 button {
   cursor: pointer;
 }
-
 
 button:disabled {
   cursor: not-allowed;
 }
 
-
 img {
   max-width: 100%;
-
   display: block;
 }
 
-
 a {
   color: inherit;
-
   text-decoration: none;
 }
 
+::selection {
+  background: #ead6b7;
+  color: #3c2d20;
+}
 
-/* =========================================================
+/* ============================================================
+   SCROLLBAR
+============================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f5ede4;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #d2b487;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b88a48;
+}
+
+/* ============================================================
    HEADER
-========================================================= */
+============================================================ */
 
 .site-header {
-  width: 100%;
+  position: relative;
+  z-index: 100;
 
-  min-height: 70px;
+  width: 100%;
+  min-height: 72px;
 
   display: flex;
-
   align-items: center;
-
   justify-content: space-between;
 
   gap: 20px;
 
-  padding:
-    12px
-    max(
-      20px,
-      calc(
-        (100vw - 1160px) / 2
-      )
-    );
+  padding: 12px max(22px, calc((100vw - 1180px) / 2));
 
-  border-bottom:
-    1px solid
-    rgba(185, 133, 50, 0.14);
+  border-bottom: 1px solid rgba(173, 118, 40, 0.14);
 
-  background:
-    rgba(255, 252, 247, 0.82);
+  background: rgba(255, 253, 249, 0.78);
 
-  backdrop-filter:
-    blur(16px);
-
-  position: relative;
-
-  z-index: 10;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
+/* ============================================================
+   BRAND
+============================================================ */
 
 .brand {
-  display: flex;
-
+  display: inline-flex;
   align-items: center;
 
-  gap: 9px;
+  gap: 10px;
+
+  min-width: 0;
 }
 
-
 .brand-mark {
-  width: 34px;
+  width: 36px;
+  height: 36px;
 
-  height: 34px;
+  flex-shrink: 0;
 
   display: flex;
-
   align-items: center;
-
   justify-content: center;
+
+  border: 1px solid rgba(173, 118, 40, 0.2);
 
   border-radius: 11px;
 
-  background:
-    #f0dfc3;
+  background: linear-gradient(145deg, #f5e8d4, #ead4b5);
 
-  color:
-    #9b6b24;
+  color: var(--gold-dark);
 
   font-size: 16px;
+
+  box-shadow: 0 5px 15px rgba(117, 78, 31, 0.08);
+
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
 }
 
+.brand:hover .brand-mark {
+  transform: rotate(5deg) translateY(-1px);
+
+  box-shadow: 0 8px 20px rgba(117, 78, 31, 0.12);
+}
 
 .brand-text {
   display: flex;
-
   align-items: baseline;
 
-  gap: 3px;
-}
+  gap: 4px;
 
+  white-space: nowrap;
+}
 
 .brand-text strong {
-  font-family:
-    Georgia,
-    "Times New Roman",
-    serif;
+  font-family: var(--serif);
 
-  font-size: 17px;
+  color: #332a23;
 
-  color:
-    #352d27;
+  font-size: 19px;
+  font-weight: 500;
+
+  letter-spacing: -0.2px;
 }
-
 
 .brand-text small {
-  color:
-    #a7752a;
+  color: var(--gold);
 
-  font-size: 10px;
-
+  font-size: 9px;
   font-weight: 800;
+
+  letter-spacing: 0.8px;
 }
 
+/* ============================================================
+   HEADER NAVIGATION
+============================================================ */
 
 .header-navigation {
   display: flex;
-
   align-items: center;
 
-  gap: 7px;
+  gap: 8px;
 }
 
-
 .nav-button {
+  min-height: 37px;
+
   display: inline-flex;
-
   align-items: center;
-
   justify-content: center;
 
-  min-height: 35px;
+  padding: 0 15px;
 
-  padding:
-    0
-    13px;
-
-  border-radius: 9px;
+  border-radius: 10px;
 
   font-size: 10px;
-
   font-weight: 750;
+
+  letter-spacing: 0.1px;
 
   transition:
     transform 0.2s ease,
-    background 0.2s ease;
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
-
 
 .nav-button:hover {
-  transform:
-    translateY(-1px);
+  transform: translateY(-1px);
 }
-
 
 .nav-button.secondary {
-  border:
-    1px solid
-    rgba(185, 133, 50, 0.23);
+  border: 1px solid rgba(173, 118, 40, 0.2);
 
-  background:
-    rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.72);
 
-  color:
-    #70532d;
+  color: #705538;
 }
 
+.nav-button.secondary:hover {
+  border-color: rgba(173, 118, 40, 0.34);
+
+  background: #fbf4eb;
+}
 
 .nav-button.secondary.active {
-  background:
-    #f4e7d4;
-}
+  border-color: rgba(173, 118, 40, 0.2);
 
+  background: #f1e3d0;
+
+  color: #704b24;
+}
 
 .nav-button.primary {
-  background:
-    #a97429;
+  border: 1px solid rgba(142, 95, 31, 0.2);
 
-  color:
-    white;
+  background: linear-gradient(135deg, #b27b2d, #9b6822);
 
-  box-shadow:
-    0 6px 15px
-    rgba(157, 111, 37, 0.16);
+  color: white;
+
+  box-shadow: 0 7px 17px rgba(142, 95, 31, 0.16);
 }
 
+.nav-button.primary:hover {
+  box-shadow: 0 10px 23px rgba(142, 95, 31, 0.2);
+}
 
 .nav-button.primary.active {
-  background:
-    #91651f;
+  background: linear-gradient(135deg, #95621f, #81531b);
 }
 
+/* ============================================================
+   GLOBAL FOCUS
+============================================================ */
 
-/* =========================================================
-   GLOBAL LOADING
-========================================================= */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(173, 118, 40, 0.55);
+
+  outline-offset: 3px;
+}
+
+/* ============================================================
+   GLOBAL LOADING SPINNER
+============================================================ */
 
 .loading-spinner {
   width: 30px;
-
   height: 30px;
+
+  border: 3px solid rgba(173, 118, 40, 0.16);
+
+  border-top-color: var(--gold);
 
   border-radius: 50%;
 
-  border:
-    3px solid
-    rgba(185, 133, 50, 0.16);
-
-  border-top-color:
-    #a97429;
-
-  animation:
-    spin 0.8s linear infinite;
+  animation: jewelSpin 0.8s linear infinite;
 }
 
-
-@keyframes spin {
+@keyframes jewelSpin {
   to {
-    transform:
-      rotate(360deg);
+    transform: rotate(360deg);
   }
 }
 
-
-/* =========================================================
+/* ============================================================
    MOBILE HEADER
-========================================================= */
+============================================================ */
 
 @media (max-width: 600px) {
-
   .site-header {
     min-height: 64px;
 
-    padding:
-      10px
-      12px;
+    padding: 10px 14px;
 
+    gap: 10px;
+  }
+
+  .brand {
     gap: 8px;
   }
 
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+
+    border-radius: 10px;
+
+    font-size: 14px;
+  }
 
   .brand-text strong {
-    font-size: 15px;
+    font-size: 16px;
   }
 
-
-  .brand-mark {
-    width: 31px;
-
-    height: 31px;
+  .brand-text small {
+    font-size: 8px;
   }
-
 
   .header-navigation {
     gap: 5px;
   }
 
-
   .nav-button {
-    padding:
-      0
-      9px;
-
     min-height: 33px;
+
+    padding: 0 10px;
+
+    border-radius: 8px;
 
     font-size: 9px;
   }
+}
 
+@media (max-width: 380px) {
+  .site-header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .brand-text strong {
+    font-size: 15px;
+  }
+
+  .nav-button {
+    padding: 0 8px;
+  }
 }
