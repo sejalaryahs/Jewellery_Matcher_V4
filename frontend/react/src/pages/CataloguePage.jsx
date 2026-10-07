@@ -232,9 +232,9 @@ function CataloguePage() {
             Explore the <span>collection.</span>
           </h1>
 
-          <p>
+          {/* <p>
             Browse and manage the jewellery designs available in your catalogue.
-          </p>
+          </p> */}
 
           <div className="catalogue-heading-actions">
             <Link to="/search" className="catalogue-search-page-button">
@@ -355,11 +355,11 @@ function CataloguePage() {
         ================================================= */}
 
         <div className="catalogue-result-bar">
-          <div>
+          {/* <div>
             <span className="catalogue-result-label">Jewellery Designs</span>
 
             <strong>{filteredItems.length}</strong>
-          </div>
+          </div> */}
 
           {(collection !== "all" ||
             selectedType !== "all" ||

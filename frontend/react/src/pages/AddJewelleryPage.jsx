@@ -229,10 +229,10 @@ function AddJewelleryPage() {
             Add new <span>jewellery.</span>
           </h1>
 
-          <p>
+          {/* <p>
             Add a jewellery design to your catalogue and keep its details
             organized for future visual search.
-          </p>
+          </p> */}
         </section>
 
         {/* =====================================================
@@ -249,7 +249,7 @@ function AddJewelleryPage() {
 
                 <div>
                   <h2>Jewellery image</h2>
-                  <p>Upload or capture the design</p>
+                  {/* <p>Upload or capture the design</p> */}
                 </div>
               </div>
 
@@ -338,7 +338,7 @@ function AddJewelleryPage() {
 
                 <div>
                   <h2>Jewellery details</h2>
-                  <p>Add the catalogue information</p>
+                  {/* <p>Add the catalogue information</p> */}
                 </div>
               </div>
 

@@ -40,10 +40,10 @@ function SearchPage() {
             Find your <span>jewellery match.</span>
           </h1>
 
-          <p>
+          {/* <p>
             Select a search direction and upload a jewellery image to begin your
             catalogue search.
-          </p>
+          </p> */}
         </section>
 
         <section className="search-workspace">
@@ -54,9 +54,9 @@ function SearchPage() {
               <div>
                 <h2>Choose search mode</h2>
 
-                <p>
+                {/* <p>
                   Select the jewellery collections you want to search between.
-                </p>
+                </p> */}
               </div>
             </div>
 
@@ -76,7 +76,7 @@ function SearchPage() {
               <div>
                 <h2>Add jewellery image</h2>
 
-                <p>Upload an image or take a photo of the jewellery design.</p>
+                {/* <p>Upload an image or take a photo of the jewellery design.</p> */}
               </div>
             </div>
 

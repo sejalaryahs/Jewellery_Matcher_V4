@@ -20,13 +20,13 @@ function ManagementPage() {
 
             <h1>Jewellery Management</h1>
 
-            <p>
+            {/* <p>
               Manage your jewellery collection, add new designs, and maintain
               existing catalogue records from one place.
-            </p>
+            </p> */}
           </div>
 
-          <div className="management-hero-mark">
+          {/* <div className="management-hero-mark">
             <span>✦</span>
 
             <small>
@@ -34,7 +34,7 @@ function ManagementPage() {
               <br />
               MATCH
             </small>
-          </div>
+          </div> */}
         </section>
 
         {/* =================================================
@@ -92,7 +92,7 @@ function ManagementPage() {
               className="management-action-card management-manage-card"
             >
               <div className="management-action-top">
-                <div className="management-action-icon">◇</div>
+                <div className="management-action-icon">✦</div>
 
                 <span className="management-action-number">02</span>
               </div>
@@ -122,7 +122,7 @@ function ManagementPage() {
         {/* =================================================
             WORKFLOW INFORMATION
         ================================================= */}
-
+        {/* 
         <section className="management-workflow">
           <div className="management-workflow-icon">✦</div>
 
@@ -136,7 +136,7 @@ function ManagementPage() {
               an existing catalogue record needs to be updated or removed.
             </p>
           </div>
-        </section>
+        </section> */}
 
         {/* =================================================
             QUICK NAVIGATION
@@ -147,7 +147,7 @@ function ManagementPage() {
             <span>←</span>
 
             <div>
-              <small>RETURN TO</small>
+              <small>RETURN TO </small>
 
               <strong>Catalogue</strong>
             </div>

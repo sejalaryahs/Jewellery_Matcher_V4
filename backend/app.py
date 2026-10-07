@@ -1173,10 +1173,7 @@ def add_jewellery():
             jsonify(
                 {
                     "success": True,
-                    "message": (
-                        "Jewellery added successfully. "
-                        "Image stored in the collection/type folder and MongoDB."
-                    ),
+                    "message": ("Jewellery added successfully. "),
                     "item": response_item,
                 }
             ),

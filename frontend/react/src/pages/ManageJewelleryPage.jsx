@@ -438,15 +438,11 @@ function ManageJewelleryPage() {
 
         <section className="catalogue-hero management-page-hero">
           <div>
-            <Link to="/management" className="management-back-link">
-              ← Management
-            </Link>
-
             <span className="catalogue-eyebrow">JEWELLERY MANAGEMENT</span>
 
             <h1>Manage Jewellery</h1>
 
-            <p>Search, edit or remove jewellery from your catalogue.</p>
+            {/* <p>Search, edit or remove jewellery from your catalogue.</p> */}
           </div>
 
           <Link to="/add-jewellery" className="management-add-link">
@@ -549,10 +545,10 @@ function ManageJewelleryPage() {
 
         {!loading && (
           <div className="management-results-summary">
-            <span>
+            {/* <span>
               {filteredItems.length}{" "}
               {filteredItems.length === 1 ? "jewellery" : "jewellery pieces"}
-            </span>
+            </span> */}
 
             {(search || collection !== "all") && (
               <button
@@ -770,8 +766,6 @@ function ManageJewelleryPage() {
                     onChange={handleEditImageChange}
                   />
                 </label>
-
-                <small>Leave unchanged to keep the current image.</small>
               </div>
 
               {/* FIELDS */}
