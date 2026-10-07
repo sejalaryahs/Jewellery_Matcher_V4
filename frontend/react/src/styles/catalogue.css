@@ -100,6 +100,68 @@
 
   line-height: 1.75;
 }
+.catalogue-heading-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.catalogue-search-page-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+
+  min-height: 50px;
+  padding: 0 22px;
+
+  border: 1px solid #b99558;
+  border-radius: 2px;
+
+  background: #34271f;
+  color: #fffaf2;
+
+  text-decoration: none;
+
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.catalogue-search-page-button strong {
+  font-size: 18px;
+  font-weight: 400;
+
+  transition: transform 0.25s ease;
+}
+
+.catalogue-search-page-button:hover {
+  transform: translateY(-2px);
+
+  background: #46352a;
+
+  box-shadow: 0 12px 28px rgba(70, 48, 28, 0.16);
+}
+
+.catalogue-search-page-button:hover strong {
+  transform: translateX(4px);
+}
+
+@media (max-width: 650px) {
+  .catalogue-heading-actions {
+    margin-top: 20px;
+  }
+
+  .catalogue-search-page-button {
+    width: 100%;
+  }
+}
 
 /* ============================================================
    FILTER PANEL

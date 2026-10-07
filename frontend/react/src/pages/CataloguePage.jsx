@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-
+import { Link } from "react-router-dom";
 import Header from "../components/Header";
 import CatalogueCard from "../components/CatalogueCard";
 
@@ -226,12 +226,21 @@ function CataloguePage() {
         ================================================= */}
 
         <section className="catalogue-heading">
-          <div>
-            <span className="catalogue-eyebrow">✦ JEWELLERY COLLECTION</span>
+          <div className="catalogue-eyebrow">✦ Jewellery catalogue</div>
 
-            <h1>Catalogue</h1>
+          <h1>
+            Explore the <span>collection.</span>
+          </h1>
 
-            <p>Manage all jewellery designs available for visual search.</p>
+          <p>
+            Browse and manage the jewellery designs available in your catalogue.
+          </p>
+
+          <div className="catalogue-heading-actions">
+            <Link to="/search" className="catalogue-search-page-button">
+              <span>Search Jewellery</span>
+              <strong>→</strong>
+            </Link>
           </div>
         </section>
 
