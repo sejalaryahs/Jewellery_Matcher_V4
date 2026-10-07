@@ -22,7 +22,6 @@ from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
 
-
 # ============================================================
 # INTERNAL IMPORTS
 # ============================================================
@@ -32,18 +31,11 @@ from .config import (
     TOP_K,
 )
 
-from .services.matcher import match_jewellery
-
-from .services.ai_queue import (
-    get_ai_status,
-    start_ai_worker,
-)
 
 from .database.mongodb import (
     get_jewellery_collection,
     test_mongodb_connection,
 )
-
 
 # ============================================================
 # FLASK APPLICATION
@@ -68,43 +60,20 @@ app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 # PROJECT DIRECTORIES
 # ============================================================
 
-BASE_DIR = (
-    Path(__file__)
-    .resolve()
-    .parent
-    .parent
-)
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-BACKEND_DIR = (
-    BASE_DIR / "backend"
-)
+BACKEND_DIR = BASE_DIR / "backend"
 
-DATABASE_DIR = (
-    BACKEND_DIR / "database"
-)
+DATABASE_DIR = BACKEND_DIR / "database"
 
-CATALOGUE_DIR = (
-    BACKEND_DIR / "catalogue"
-)
+CATALOGUE_DIR = BACKEND_DIR / "catalogue"
 
-GOLD_DIR = (
-    CATALOGUE_DIR / "gold"
-)
+GOLD_DIR = CATALOGUE_DIR / "gold"
 
-PROTOTYPE_DIR = (
-    CATALOGUE_DIR / "prototype"
-)
+PROTOTYPE_DIR = CATALOGUE_DIR / "prototype"
 
-DINO_INDEX = (
-    DATABASE_DIR / "dino_index.npz"
-)
 
-FRONTEND_DIST = (
-    BASE_DIR
-    / "frontend"
-    / "react"
-    / "dist"
-)
+FRONTEND_DIST = BASE_DIR / "frontend" / "react" / "dist"
 
 
 # ============================================================
@@ -151,8 +120,33 @@ VALID_JEWELLERY_TYPES = {
 
 
 # ============================================================
+# CREATE CATALOGUE DIRECTORY STRUCTURE
+# ============================================================
+
+# The physical image storage always follows:
+# catalogue/<collection>/<jewellery_type>/<image>
+# Example: catalogue/gold/LP/J001.jpeg
+#          catalogue/prototype/GP/J101.jpeg
+#
+# Empty type folders are created automatically for both collections
+# when the backend starts. This keeps the local catalogue structure
+# ready before the first upload.
+
+
+def ensure_catalogue_directories():
+
+    for collection in VALID_COLLECTIONS.keys():
+        collection_directory = CATALOGUE_DIR / collection
+        collection_directory.mkdir(parents=True, exist_ok=True)
+
+        for jewellery_type in VALID_JEWELLERY_TYPES:
+            (collection_directory / jewellery_type).mkdir(parents=True, exist_ok=True)
+
+
+# ============================================================
 # NORMALIZE COLLECTION
 # ============================================================
+
 
 def normalize_collection(value):
 
@@ -170,9 +164,14 @@ def normalize_collection(value):
     return None
 
 
+# Create Gold/<Type> and Prototype/<Type> folders automatically.
+ensure_catalogue_directories()
+
+
 # ============================================================
 # CHECK ALLOWED IMAGE
 # ============================================================
+
 
 def allowed_file(filename):
 
@@ -182,11 +181,7 @@ def allowed_file(filename):
     if "." not in filename:
         return False
 
-    extension = (
-        filename
-        .rsplit(".", 1)[1]
-        .lower()
-    )
+    extension = filename.rsplit(".", 1)[1].lower()
 
     return extension in ALLOWED_EXTENSIONS
 
@@ -194,6 +189,7 @@ def allowed_file(filename):
 # ============================================================
 # GET ITEM FILENAME
 # ============================================================
+
 
 def get_item_filename(item):
 
@@ -203,23 +199,17 @@ def get_item_filename(item):
     filename = item.get("filename")
 
     if filename:
-        return Path(
-            str(filename)
-        ).name
+        return Path(str(filename)).name
 
     image = item.get("image")
 
     if image:
-        return Path(
-            str(image)
-        ).name
+        return Path(str(image)).name
 
     image_path = item.get("image_path")
 
     if image_path:
-        return Path(
-            str(image_path)
-        ).name
+        return Path(str(image_path)).name
 
     return None
 
@@ -228,58 +218,112 @@ def get_item_filename(item):
 # GET ITEM COLLECTION
 # ============================================================
 
+
 def get_item_collection(item):
 
     if not item:
         return None
 
-    return normalize_collection(
-        item.get("collection")
-    )
+    return normalize_collection(item.get("collection"))
+
+
+# ============================================================
+# GET ITEM LOCAL IMAGE PATH
+# ============================================================
+
+
+def get_item_local_path(item):
+
+    if not item:
+        return None
+
+    collection = get_item_collection(item)
+    filename = get_item_filename(item)
+    jewellery_type = str(item.get("type") or "").strip()
+
+    if not collection or not filename:
+        return None
+
+    # New structure: catalogue/<collection>/<type>/<filename>
+    if jewellery_type:
+        return CATALOGUE_DIR / collection / jewellery_type / filename
+
+    # Backward compatibility for older records.
+    image_path = item.get("image_path")
+    if image_path:
+        path = Path(str(image_path))
+        if not path.is_absolute():
+            return CATALOGUE_DIR / path
+        return path
+
+    base_dir = GOLD_DIR if collection == "gold" else PROTOTYPE_DIR
+    return base_dir / filename
 
 
 # ============================================================
 # GET GRIDFS
 # ============================================================
 
+
+def get_mongo_database():
+
+    # get_jewellery_collection() is still used only to obtain the
+    # existing MongoDB connection/database. The actual jewellery data
+    # is stored in the Gold and Prototype collections.
+    base_collection = get_jewellery_collection()
+    return base_collection.database
+
+
+def get_mongo_collection(collection_name):
+
+    normalized = normalize_collection(collection_name)
+
+    if normalized not in {"gold", "prototype"}:
+        raise ValueError("MongoDB collection must be Gold or Prototype.")
+
+    database = get_mongo_database()
+
+    # These are the two MongoDB collections created by the user:
+    # jewelmatch.gold and jewelmatch.prototype
+    return database[normalized]
+
+
+def get_catalogue_collections():
+
+    database = get_mongo_database()
+
+    return {
+        "gold": database["gold"],
+        "prototype": database["prototype"],
+    }
+
+
 def get_gridfs():
 
-    mongo_collection = (
-        get_jewellery_collection()
-    )
-
-    database = mongo_collection.database
-
-    return GridFS(database)
+    return GridFS(get_mongo_database())
 
 
 # ============================================================
 # CHECK GRIDFS ID
 # ============================================================
 
+
 def get_gridfs_id(item):
 
     if not item:
         return None
 
-    value = item.get(
-        "image_gridfs_id"
-    )
+    value = item.get("image_gridfs_id")
 
     if not value:
         return None
 
     try:
 
-        if isinstance(
-            value,
-            ObjectId
-        ):
+        if isinstance(value, ObjectId):
             return value
 
-        return ObjectId(
-            str(value)
-        )
+        return ObjectId(str(value))
 
     except Exception:
 
@@ -290,6 +334,7 @@ def get_gridfs_id(item):
 # ADD IMAGE URL TO ITEM
 # ============================================================
 
+
 def add_image_url(item):
 
     if not item:
@@ -297,17 +342,11 @@ def add_image_url(item):
 
     item = dict(item)
 
-    collection = (
-        get_item_collection(item)
-    )
+    collection = get_item_collection(item)
 
-    filename = (
-        get_item_filename(item)
-    )
+    filename = get_item_filename(item)
 
-    gridfs_id = (
-        get_gridfs_id(item)
-    )
+    gridfs_id = get_gridfs_id(item)
 
     # --------------------------------------------------------
     # GRIDFS IMAGE
@@ -315,11 +354,7 @@ def add_image_url(item):
 
     if gridfs_id:
 
-        item["image_url"] = (
-            f"/catalogue-image/"
-            f"stored/"
-            f"{str(gridfs_id)}"
-        )
+        item["image_url"] = f"/catalogue-image/" f"stored/" f"{str(gridfs_id)}"
 
     # --------------------------------------------------------
     # LOCAL IMAGE FALLBACK
@@ -327,16 +362,9 @@ def add_image_url(item):
 
     elif collection and filename:
 
-        encoded_filename = quote(
-            filename,
-            safe=""
-        )
+        encoded_filename = quote(filename, safe="")
 
-        item["image_url"] = (
-            f"/catalogue-image/"
-            f"{collection}/"
-            f"{encoded_filename}"
-        )
+        item["image_url"] = f"/catalogue-image/" f"{collection}/" f"{encoded_filename}"
 
     if filename:
 
@@ -350,6 +378,7 @@ def add_image_url(item):
 # SERIALIZE MONGODB ITEM
 # ============================================================
 
+
 def serialize_mongo_item(item):
 
     if not item:
@@ -357,21 +386,12 @@ def serialize_mongo_item(item):
 
     item = dict(item)
 
-    item.pop(
-        "_id",
-        None
-    )
+    item.pop("_id", None)
 
     # ObjectId cannot be returned directly by jsonify
-    if item.get(
-        "image_gridfs_id"
-    ):
+    if item.get("image_gridfs_id"):
 
-        item["image_gridfs_id"] = (
-            str(
-                item["image_gridfs_id"]
-            )
-        )
+        item["image_gridfs_id"] = str(item["image_gridfs_id"])
 
     return add_image_url(item)
 
@@ -380,23 +400,23 @@ def serialize_mongo_item(item):
 # GET MONGODB COLLECTION
 # ============================================================
 
-def get_catalogue_collection():
 
-    return get_jewellery_collection()
+def get_catalogue_collection(collection_name):
+
+    return get_mongo_collection(collection_name)
 
 
 # ============================================================
 # HEALTH
 # ============================================================
 
+
 @app.get("/api/health")
 def health():
 
     try:
 
-        mongo_ok = (
-            test_mongodb_connection()
-        )
+        mongo_ok = test_mongodb_connection()
 
         return jsonify(
             {
@@ -409,102 +429,46 @@ def health():
 
     except Exception as exc:
 
-        print(
-            "Health check error:",
-            repr(exc)
+        print("Health check error:", repr(exc))
+
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": str(exc),
+                }
+            ),
+            500,
         )
-
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
-
-
-# ============================================================
-# AI STATUS
-# ============================================================
-
-@app.get("/api/ai-status")
-def ai_status():
-
-    try:
-
-        status = (
-            get_ai_status()
-        )
-
-        return jsonify(
-            {
-                "success": True,
-                "status": status,
-            }
-        )
-
-    except Exception as exc:
-
-        print(
-            "AI status error:",
-            repr(exc)
-        )
-
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
 
 
 # ============================================================
 # CATALOGUE
 # ============================================================
 
+
 @app.get("/api/catalogue")
 def get_catalogue():
 
     try:
 
-        collection_name = (
-            request.args
-            .get(
-                "collection",
-                "all"
-            )
-            .strip()
-            .lower()
-        )
+        collection_name = request.args.get("collection", "all").strip().lower()
 
-        search_text = (
-            request.args
-            .get(
-                "search",
-                ""
-            )
-            .strip()
-        )
-
-        mongo_collection = (
-            get_catalogue_collection()
-        )
+        search_text = request.args.get("search", "").strip()
 
         # ----------------------------------------------------
-        # VALIDATE COLLECTION
+        # SELECT MONGODB COLLECTIONS
         # ----------------------------------------------------
 
-        if collection_name not in {
-            "all",
-            "gold",
-            "prototype",
-        }:
+        collections = get_catalogue_collections()
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid collection.",
-                }
-            ), 400
+        if collection_name == "all":
+            selected_collections = [
+                collections["gold"],
+                collections["prototype"],
+            ]
+        else:
+            selected_collections = [collections[collection_name]]
 
         # ----------------------------------------------------
         # BUILD QUERY
@@ -512,134 +476,41 @@ def get_catalogue():
 
         query = {}
 
-        if collection_name in {
-            "gold",
-            "prototype",
-        }:
-
-            query["collection"] = (
-                VALID_COLLECTIONS[
-                    collection_name
-                ]
-            )
-
-        # ----------------------------------------------------
-        # SEARCH
-        # ----------------------------------------------------
-
         if search_text:
 
             query["$or"] = [
-
-                {
-                    "id": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "design_id": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "name": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "design_name": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "type": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "subtype": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
-                {
-                    "description": {
-                        "$regex": search_text,
-                        "$options": "i",
-                    }
-                },
-
+                {"id": {"$regex": search_text, "$options": "i"}},
+                {"design_id": {"$regex": search_text, "$options": "i"}},
+                {"name": {"$regex": search_text, "$options": "i"}},
+                {"design_name": {"$regex": search_text, "$options": "i"}},
+                {"type": {"$regex": search_text, "$options": "i"}},
+                {"subtype": {"$regex": search_text, "$options": "i"}},
+                {"description": {"$regex": search_text, "$options": "i"}},
             ]
 
         # ----------------------------------------------------
-        # FETCH ITEMS
+        # FETCH FROM GOLD / PROTOTYPE
         # ----------------------------------------------------
 
-        documents = (
-            mongo_collection
-            .find(
-                query,
-                {
-                    "_id": 0
-                }
-            )
-            .sort(
-                [
-                    ("id", 1)
-                ]
-            )
-        )
+        items = []
 
-        items = [
-            serialize_mongo_item(
-                document
-            )
-            for document in documents
-        ]
+        for mongo_collection in selected_collections:
+            documents = mongo_collection.find(query, {"_id": 0}).sort([("id", 1)])
+
+            items.extend(serialize_mongo_item(document) for document in documents)
+
+        items.sort(key=lambda item: str(item.get("id") or item.get("design_id") or ""))
 
         # ----------------------------------------------------
-        # COUNTS
+        # COUNTS FROM BOTH MONGODB COLLECTIONS
         # ----------------------------------------------------
 
-        total_count = (
-            mongo_collection
-            .count_documents({})
+        total_count = sum(
+            collection.count_documents({}) for collection in collections.values()
         )
 
-        gold_count = (
-            mongo_collection
-            .count_documents(
-                {
-                    "collection":
-                    VALID_COLLECTIONS[
-                        "gold"
-                    ]
-                }
-            )
-        )
-
-        prototype_count = (
-            mongo_collection
-            .count_documents(
-                {
-                    "collection":
-                    VALID_COLLECTIONS[
-                        "prototype"
-                    ]
-                }
-            )
-        )
+        gold_count = collections["gold"].count_documents({})
+        prototype_count = collections["prototype"].count_documents({})
 
         # ----------------------------------------------------
         # RESPONSE
@@ -658,89 +529,75 @@ def get_catalogue():
 
     except Exception as exc:
 
-        print(
-            "Catalogue error:",
-            repr(exc)
-        )
+        print("Catalogue error:", repr(exc))
 
         traceback.print_exc()
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
 
 
 # ============================================================
 # GET SINGLE CATALOGUE ITEM
 # ============================================================
 
-@app.get(
-    "/api/catalogue/<item_id>"
-)
+
+@app.get("/api/catalogue/<item_id>")
 def get_catalogue_item(item_id):
 
-    return get_single_jewellery_item(
-        item_id
-    )
+    return get_single_jewellery_item(item_id)
 
 
 # ============================================================
 # GET SINGLE JEWELLERY ITEM
 # ============================================================
 
-@app.get(
-    "/api/jewellery/<item_id>"
-)
+
+@app.get("/api/jewellery/<item_id>")
 def get_jewellery_item(item_id):
 
-    return get_single_jewellery_item(
-        item_id
-    )
+    return get_single_jewellery_item(item_id)
 
 
 # ============================================================
 # SHARED GET SINGLE JEWELLERY
 # ============================================================
 
-def get_single_jewellery_item(
-    item_id
-):
+
+def get_single_jewellery_item(item_id):
 
     try:
 
-        mongo_collection = (
-            get_catalogue_collection()
-        )
+        item = None
 
-        item = (
-            mongo_collection
-            .find_one(
-                {
-                    "id": item_id
-                },
-                {
-                    "_id": 0
-                }
+        for mongo_collection in get_catalogue_collections().values():
+            item = mongo_collection.find_one(
+                {"id": item_id},
+                {"_id": 0},
             )
-        )
+            if item:
+                break
 
         if not item:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Jewellery not found.",
-                }
-            ), 404
-
-        item = (
-            serialize_mongo_item(
-                item
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Jewellery not found.",
+                    }
+                ),
+                404,
             )
-        )
+
+        item = serialize_mongo_item(item)
 
         return jsonify(
             {
@@ -751,31 +608,28 @@ def get_single_jewellery_item(
 
     except Exception as exc:
 
-        print(
-            "Get jewellery error:",
-            repr(exc)
-        )
+        print("Get jewellery error:", repr(exc))
 
         traceback.print_exc()
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
 
 
 # ============================================================
 # CATALOGUE IMAGE FROM GRIDFS
 # ============================================================
 
-@app.get(
-    "/catalogue-image/stored/<gridfs_id>"
-)
-def catalogue_image_stored(
-    gridfs_id
-):
+
+@app.get("/catalogue-image/stored/<gridfs_id>")
+def catalogue_image_stored(gridfs_id):
 
     try:
 
@@ -785,18 +639,19 @@ def catalogue_image_stored(
 
         try:
 
-            object_id = ObjectId(
-                gridfs_id
-            )
+            object_id = ObjectId(gridfs_id)
 
         except Exception:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid image ID.",
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Invalid image ID.",
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # GET GRIDFS
@@ -808,26 +663,23 @@ def catalogue_image_stored(
         # CHECK FILE
         # ----------------------------------------------------
 
-        if not fs.exists(
-            object_id
-        ):
+        if not fs.exists(object_id):
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Stored image not found.",
-                }
-            ), 404
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Stored image not found.",
+                    }
+                ),
+                404,
+            )
 
         # ----------------------------------------------------
         # GET FILE
         # ----------------------------------------------------
 
-        grid_file = (
-            fs.get(
-                object_id
-            )
-        )
+        grid_file = fs.get(object_id)
 
         # ----------------------------------------------------
         # RETURN FILE
@@ -837,233 +689,121 @@ def catalogue_image_stored(
             grid_file,
             mimetype=(
                 grid_file.content_type
-                if getattr(
-                    grid_file,
-                    "content_type",
-                    None
-                )
+                if getattr(grid_file, "content_type", None)
                 else None
             ),
             download_name=(
                 grid_file.filename
-                if getattr(
-                    grid_file,
-                    "filename",
-                    None
-                )
+                if getattr(grid_file, "filename", None)
                 else "jewellery-image"
             ),
         )
 
-        response.headers[
-            "Cache-Control"
-        ] = (
-            "public, max-age=31536000"
-        )
+        response.headers["Cache-Control"] = "public, max-age=31536000"
 
         return response
 
     except Exception as exc:
 
-        print(
-            "GridFS image error:",
-            repr(exc)
-        )
+        print("GridFS image error:", repr(exc))
 
         traceback.print_exc()
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
 
 
 # ============================================================
 # CATALOGUE IMAGE - LOCAL FALLBACK
 # ============================================================
 
-@app.get(
-    "/catalogue-image/"
-    "<collection>/"
-    "<path:filename>"
-)
-def catalogue_image(
-    collection,
-    filename
-):
 
+@app.get("/catalogue-image/<collection>/<path:filename>")
+def catalogue_image(collection, filename):
     try:
+        collection = collection.strip().lower()
+        if collection not in {"gold", "prototype"}:
+            return jsonify({"success": False, "error": "Invalid collection."}), 400
 
-        collection = (
-            collection
-            .strip()
-            .lower()
-        )
+        collection_directory = (CATALOGUE_DIR / collection).resolve()
+        requested_path = (collection_directory / filename).resolve()
 
-        # ----------------------------------------------------
-        # SELECT DIRECTORY
-        # ----------------------------------------------------
+        try:
+            requested_path.relative_to(collection_directory)
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid image path."}), 400
 
-        if collection == "gold":
+        if not requested_path.exists() or not requested_path.is_file():
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Catalogue image not found.",
+                        "filename": filename,
+                        "collection": collection,
+                    }
+                ),
+                404,
+            )
 
-            directory = GOLD_DIR
-
-        elif collection == "prototype":
-
-            directory = PROTOTYPE_DIR
-
-        else:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid collection.",
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # SECURITY
-        # ----------------------------------------------------
-
-        safe_filename = (
-            Path(filename).name
-        )
-
-        if not safe_filename:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid filename.",
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # CHECK LOCAL FILE
-        # ----------------------------------------------------
-
-        image_path = (
-            directory
-            / safe_filename
-        )
-
-        if not image_path.exists():
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Catalogue image not found."
-                    ),
-                    "filename": safe_filename,
-                    "collection": collection,
-                }
-            ), 404
-
-        # ----------------------------------------------------
-        # SEND IMAGE
-        # ----------------------------------------------------
-
-        response = send_from_directory(
-            str(directory),
-            safe_filename
-        )
-
-        response.headers[
-            "Cache-Control"
-        ] = (
-            "public, max-age=31536000"
-        )
-
+        relative_path = requested_path.relative_to(collection_directory)
+        response = send_from_directory(str(collection_directory), str(relative_path))
+        response.headers["Cache-Control"] = "public, max-age=31536000"
         return response
 
     except Exception as exc:
-
-        print(
-            "Catalogue image error:",
-            repr(exc)
-        )
-
+        print("Catalogue image error:", repr(exc))
         traceback.print_exc()
-
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 # ============================================================
 # GENERATE NEXT JEWELLERY ID
 # ============================================================
 
-def generate_next_jewellery_id(
-    mongo_collection
-):
+
+def generate_next_jewellery_id():
 
     try:
 
-        documents = (
-            mongo_collection
-            .find(
+        highest_number = 0
+
+        for mongo_collection in get_catalogue_collections().values():
+            documents = mongo_collection.find(
                 {
                     "id": {
                         "$regex": r"^J\d+$",
                         "$options": "i",
                     }
                 },
-                {
-                    "_id": 0,
-                    "id": 1,
-                }
-            )
-        )
-
-        highest_number = 0
-
-        for document in documents:
-
-            item_id = str(
-                document.get(
-                    "id",
-                    ""
-                )
-            ).strip().upper()
-
-            if not item_id.startswith("J"):
-                continue
-
-            number_part = (
-                item_id[1:]
+                {"_id": 0, "id": 1},
             )
 
-            if not number_part.isdigit():
-                continue
+            for document in documents:
+                item_id = str(document.get("id", "")).strip().upper()
 
-            number = int(
-                number_part
-            )
+                if not item_id.startswith("J"):
+                    continue
 
-            if number > highest_number:
+                number_part = item_id[1:]
 
-                highest_number = number
+                if number_part.isdigit():
+                    highest_number = max(
+                        highest_number,
+                        int(number_part),
+                    )
 
-        next_number = (
-            highest_number + 1
-        )
-
-        return f"J{next_number:03d}"
+        return f"J{highest_number + 1:03d}"
 
     except Exception as exc:
-
-        print(
-            "Generate ID error:",
-            repr(exc)
-        )
-
+        print("Generate ID error:", repr(exc))
         raise
 
 
@@ -1071,11 +811,8 @@ def generate_next_jewellery_id(
 # SAVE IMAGE TO GRIDFS
 # ============================================================
 
-def save_image_to_gridfs(
-    image_file,
-    filename,
-    collection
-):
+
+def save_image_to_gridfs(image_file, filename, collection):
 
     try:
 
@@ -1091,24 +828,17 @@ def save_image_to_gridfs(
         # READ IMAGE
         # ----------------------------------------------------
 
-        image_bytes = (
-            image_file.read()
-        )
+        image_bytes = image_file.read()
 
         if not image_bytes:
 
-            raise ValueError(
-                "Uploaded image is empty."
-            )
+            raise ValueError("Uploaded image is empty.")
 
         # ----------------------------------------------------
         # CONTENT TYPE
         # ----------------------------------------------------
 
-        content_type = (
-            image_file.content_type
-            or "application/octet-stream"
-        )
+        content_type = image_file.content_type or "application/octet-stream"
 
         # ----------------------------------------------------
         # STORE IN GRIDFS
@@ -1119,24 +849,16 @@ def save_image_to_gridfs(
             filename=filename,
             content_type=content_type,
             collection=collection,
-            uploaded_at=datetime.now(
-                timezone.utc
-            ).isoformat(),
+            uploaded_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        print(
-            "Image stored in GridFS:",
-            gridfs_id
-        )
+        print("Image stored in GridFS:", gridfs_id)
 
         return gridfs_id
 
     except Exception as exc:
 
-        print(
-            "GridFS upload error:",
-            repr(exc)
-        )
+        print("GridFS upload error:", repr(exc))
 
         raise
 
@@ -1144,6 +866,7 @@ def save_image_to_gridfs(
 # ============================================================
 # ADD JEWELLERY
 # ============================================================
+
 
 @app.post("/api/catalogue")
 def add_jewellery():
@@ -1157,49 +880,21 @@ def add_jewellery():
         # MONGODB
         # ----------------------------------------------------
 
-        mongo_collection = (
-            get_catalogue_collection()
-        )
+        # MongoDB collection is selected after reading the user's
+        # Gold / Prototype choice from the form.
+        mongo_collection = None
 
         # ----------------------------------------------------
         # FORM DATA
         # ----------------------------------------------------
 
-        name = (
-            request.form
-            .get(
-                "name",
-                ""
-            )
-            .strip()
-        )
+        name = request.form.get("name", "").strip()
 
-        collection_value = (
-            request.form
-            .get(
-                "collection",
-                ""
-            )
-            .strip()
-        )
+        collection_value = request.form.get("collection", "").strip()
 
-        jewellery_type = (
-            request.form
-            .get(
-                "type",
-                ""
-            )
-            .strip()
-        )
+        jewellery_type = request.form.get("type", "").strip()
 
-        description = (
-            request.form
-            .get(
-                "description",
-                ""
-            )
-            .strip()
-        )
+        description = request.form.get("description", "").strip()
 
         # ----------------------------------------------------
         # VALIDATE NAME
@@ -1207,41 +902,39 @@ def add_jewellery():
 
         if not name:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Please enter the jewellery name."
-                    ),
-                    "error": (
-                        "Jewellery name is required."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Please enter the jewellery name."),
+                        "error": ("Jewellery name is required."),
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # VALIDATE COLLECTION
         # ----------------------------------------------------
 
-        collection = (
-            normalize_collection(
-                collection_value
-            )
-        )
+        collection = normalize_collection(collection_value)
 
         if not collection:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Please select a collection."
-                    ),
-                    "error": (
-                        "Collection must be Gold or Prototype."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Please select a collection."),
+                        "error": ("Collection must be Gold or Prototype."),
+                    }
+                ),
+                400,
+            )
+
+        # Store the document in the user's MongoDB collection:
+        # jewelmatch.gold OR jewelmatch.prototype.
+        mongo_collection = get_catalogue_collection(collection)
 
         # ----------------------------------------------------
         # VALIDATE TYPE
@@ -1249,136 +942,120 @@ def add_jewellery():
 
         if not jewellery_type:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Please select a jewellery type."
-                    ),
-                    "error": (
-                        "Jewellery type is required."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Please select a jewellery type."),
+                        "error": ("Jewellery type is required."),
+                    }
+                ),
+                400,
+            )
+
+        # Keep the folder name consistent with the approved
+        # jewellery-type list used by the frontend.
+        jewellery_type = jewellery_type.upper()
+
+        if jewellery_type not in VALID_JEWELLERY_TYPES:
+
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Please select a valid jewellery type."),
+                        "error": ("Invalid jewellery type."),
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # VALIDATE IMAGE
         # ----------------------------------------------------
 
-        image_file = (
-            request.files.get(
-                "image"
-            )
-        )
+        image_file = request.files.get("image")
 
         if not image_file:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Please upload a jewellery image."
-                    ),
-                    "error": (
-                        "Jewellery image is required."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Please upload a jewellery image."),
+                        "error": ("Jewellery image is required."),
+                    }
+                ),
+                400,
+            )
 
         if not image_file.filename:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Invalid image file."
-                    ),
-                    "error": (
-                        "Invalid image filename."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Invalid image file."),
+                        "error": ("Invalid image filename."),
+                    }
+                ),
+                400,
+            )
 
-        if not allowed_file(
-            image_file.filename
-        ):
+        if not allowed_file(image_file.filename):
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Unsupported image format."
-                    ),
-                    "error": (
-                        "Use JPG, JPEG, PNG, WEBP or BMP."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Unsupported image format."),
+                        "error": ("Use JPG, JPEG, PNG, WEBP or BMP."),
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # GENERATE ID
         # ----------------------------------------------------
 
-        jewellery_id = (
-            generate_next_jewellery_id(
-                mongo_collection
-            )
-        )
+        jewellery_id = generate_next_jewellery_id()
 
-        print(
-            "Generated jewellery ID:",
-            jewellery_id
-        )
+        print("Generated jewellery ID:", jewellery_id)
 
         # ----------------------------------------------------
         # SECURE FILENAME
         # ----------------------------------------------------
 
-        original_filename = (
-            secure_filename(
-                image_file.filename
-            )
-        )
+        original_filename = secure_filename(image_file.filename)
 
         if not original_filename:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "message": (
-                        "Invalid image filename."
-                    ),
-                    "error": (
-                        "Invalid image filename."
-                    ),
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": ("Invalid image filename."),
+                        "error": ("Invalid image filename."),
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # SELECT LOCAL DIRECTORY
         # ----------------------------------------------------
 
-        if collection == "gold":
+        # New structure: catalogue/<collection>/<type>/image
+        target_directory = CATALOGUE_DIR / collection / jewellery_type
 
-            target_directory = GOLD_DIR
-
-        else:
-
-            target_directory = PROTOTYPE_DIR
-
-        target_directory.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+        target_directory.mkdir(parents=True, exist_ok=True)
 
         # ----------------------------------------------------
         # AVOID OVERWRITING LOCAL IMAGE
         # ----------------------------------------------------
 
-        target_path = (
-            target_directory
-            / original_filename
-        )
+        target_path = target_directory / original_filename
 
         if target_path.exists():
 
@@ -1389,20 +1066,13 @@ def add_jewellery():
 
             while target_path.exists():
 
-                new_filename = (
-                    f"{stem}_{counter}{suffix}"
-                )
+                new_filename = f"{stem}_{counter}{suffix}"
 
-                target_path = (
-                    target_directory
-                    / new_filename
-                )
+                target_path = target_directory / new_filename
 
                 counter += 1
 
-            original_filename = (
-                target_path.name
-            )
+            original_filename = target_path.name
 
         # ----------------------------------------------------
         # READ IMAGE ONCE
@@ -1410,36 +1080,29 @@ def add_jewellery():
 
         image_file.stream.seek(0)
 
-        image_bytes = (
-            image_file.read()
-        )
+        image_bytes = image_file.read()
 
         if not image_bytes:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Uploaded image is empty.",
-                }
-            ), 400
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Uploaded image is empty.",
+                    }
+                ),
+                400,
+            )
 
         # ----------------------------------------------------
         # SAVE LOCAL IMAGE
         # ----------------------------------------------------
 
-        with open(
-            target_path,
-            "wb"
-        ) as output_file:
+        with open(target_path, "wb") as output_file:
 
-            output_file.write(
-                image_bytes
-            )
+            output_file.write(image_bytes)
 
-        print(
-            "Image saved locally:",
-            target_path
-        )
+        print("Image saved locally:", target_path)
 
         # ----------------------------------------------------
         # SAVE IMAGE TO GRIDFS
@@ -1447,146 +1110,82 @@ def add_jewellery():
 
         fs = get_gridfs()
 
-        content_type = (
-            image_file.content_type
-            or "application/octet-stream"
-        )
+        content_type = image_file.content_type or "application/octet-stream"
+
+        # Store the GridFS filename using the same hierarchy as the
+        # local catalogue folder structure. GridFS does not create real
+        # folders, but this path is stored in fs.files.filename and lets
+        # MongoDB preserve the collection -> type -> image structure.
+        gridfs_relative_path = f"{collection}/{jewellery_type}/{original_filename}"
 
         gridfs_id = fs.put(
             image_bytes,
-            filename=original_filename,
+            filename=gridfs_relative_path,
             content_type=content_type,
-            collection=collection,
+            collection=VALID_COLLECTIONS[collection],
+            jewellery_type=jewellery_type,
             jewellery_id=jewellery_id,
-            uploaded_at=datetime.now(
-                timezone.utc
-            ).isoformat(),
+            image_path=gridfs_relative_path,
+            uploaded_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        print(
-            "Image stored permanently in GridFS:",
-            gridfs_id
-        )
+        print("Image stored permanently in GridFS:", gridfs_id)
 
         # ----------------------------------------------------
         # CREATE MONGODB DOCUMENT
         # ----------------------------------------------------
 
         new_item = {
-
-            "id":
-                jewellery_id,
-
-            "name":
-                name,
-
-            "collection":
-                VALID_COLLECTIONS[
-                    collection
-                ],
-
-            "type":
-                jewellery_type,
-
-            "description":
-                description,
-
-            "image":
-                original_filename,
-
-            "filename":
-                original_filename,
-
-            "image_path":
-                str(target_path),
-
+            "id": jewellery_id,
+            "name": name,
+            "collection": VALID_COLLECTIONS[collection],
+            "type": jewellery_type,
+            "description": description,
+            "image": original_filename,
+            "filename": original_filename,
+            # Store a portable relative path in MongoDB.
+            # Example: gold/LP/J001.jpeg
+            "image_path": str(target_path.relative_to(CATALOGUE_DIR)).replace(
+                "\\", "/"
+            ),
             # IMPORTANT:
             # Permanent image reference
-            "image_gridfs_id":
-                gridfs_id,
-
-            "ai_status":
-                "pending",
-
-            "ai_queued_at":
-                datetime.now(
-                    timezone.utc
-                ).isoformat(),
-
+            "image_gridfs_id": gridfs_id,
         }
 
         # ----------------------------------------------------
         # INSERT
         # ----------------------------------------------------
 
-        result = (
-            mongo_collection
-            .insert_one(
-                new_item
-            )
-        )
+        result = mongo_collection.insert_one(new_item)
 
-        print(
-            "MongoDB inserted:",
-            result.inserted_id
-        )
+        print("MongoDB inserted:", result.inserted_id)
 
-        new_item.pop(
-            "_id",
-            None
-        )
-
-        # ----------------------------------------------------
-        # START AI WORKER
-        # ----------------------------------------------------
-
-        try:
-
-            start_ai_worker()
-
-            print(
-                "AI worker checked after jewellery addition."
-            )
-
-        except Exception as worker_exc:
-
-            print(
-                "AI worker warning:",
-                repr(worker_exc)
-            )
+        new_item.pop("_id", None)
 
         # ----------------------------------------------------
         # RESPONSE
         # ----------------------------------------------------
 
-        response_item = (
-            serialize_mongo_item(
-                new_item
-            )
+        response_item = serialize_mongo_item(new_item)
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": (
+                        "Jewellery added successfully. "
+                        "Image stored in the collection/type folder and MongoDB."
+                    ),
+                    "item": response_item,
+                }
+            ),
+            201,
         )
-
-        return jsonify(
-            {
-                "success": True,
-
-                "message": (
-                    "Jewellery added successfully. "
-                    "Image stored permanently. "
-                    "AI processing will be completed automatically."
-                ),
-
-                "item":
-                    response_item,
-
-            }
-        ), 201
 
     except Exception as exc:
 
-        print(
-            "Add jewellery error:",
-            repr(exc)
-        )
+        print("Add jewellery error:", repr(exc))
 
         traceback.print_exc()
 
@@ -1616,219 +1215,256 @@ def add_jewellery():
 
                 fs = get_gridfs()
 
-                fs.delete(
-                    gridfs_id
-                )
+                fs.delete(gridfs_id)
 
             except Exception:
 
                 pass
 
-        return jsonify(
-            {
-                "success": False,
-                "message": (
-                    "Unable to add jewellery."
-                ),
-                "error": str(exc),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": ("Unable to add jewellery."),
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
 
 
 # ============================================================
 # ADD JEWELLERY COMPATIBILITY ROUTE
 # ============================================================
 
-@app.post(
-    "/api/jewellery/add"
-)
+
+@app.post("/api/jewellery/add")
 def add_jewellery_compatibility():
 
     return add_jewellery()
 
 
 # ============================================================
-# UPDATE JEWELLERY ITEM
+# UPDATE JEWELLERY
 # ============================================================
 
-def update_jewellery_item(item_id):
 
+@app.post("/api/jewellery/<item_id>")
+def update_jewellery(item_id):
+    """
+    Update an existing jewellery item in either the Gold or Prototype
+    MongoDB collection.
+
+    The local image remains under:
+        catalogue/<collection>/<type>/<filename>
+
+    If a new image is uploaded, the old local image and old GridFS file
+    are removed after the new image has been successfully stored.
+    """
+    old_local_path = None
     new_local_path = None
+    old_gridfs_id = None
     new_gridfs_id = None
 
     try:
+        # --------------------------------------------------------
+        # FIND ITEM IN GOLD OR PROTOTYPE
+        # --------------------------------------------------------
+        mongo_collection = None
+        item = None
 
-        mongo_collection = (
-            get_catalogue_collection()
-        )
+        for candidate_collection in get_catalogue_collections().values():
+            candidate = candidate_collection.find_one({"id": item_id})
+            if candidate:
+                mongo_collection = candidate_collection
+                item = candidate
+                break
 
-        # ----------------------------------------------------
-        # FIND EXISTING ITEM
-        # ----------------------------------------------------
-
-        existing_item = (
-            mongo_collection
-            .find_one(
-                {
-                    "id": item_id
-                }
+        if not item:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Jewellery not found.",
+                        "error": "Jewellery not found.",
+                    }
+                ),
+                404,
             )
-        )
 
-        if not existing_item:
+        old_collection = get_item_collection(item)
+        old_local_path = get_item_local_path(item)
+        old_gridfs_id = get_gridfs_id(item)
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Jewellery not found.",
-                }
-            ), 404
+        # --------------------------------------------------------
+        # FORM DATA
+        # --------------------------------------------------------
+        name = request.form.get("name", item.get("name", "")).strip()
+        collection_value = request.form.get(
+            "collection", item.get("collection", "")
+        ).strip()
+        jewellery_type = request.form.get("type", item.get("type", "")).strip().upper()
+        description = request.form.get(
+            "description", item.get("description", "")
+        ).strip()
 
-        # ----------------------------------------------------
-        # READ FORM DATA
-        # ----------------------------------------------------
-
-        name = (
-            request.form
-            .get(
-                "name",
-                ""
-            )
-            .strip()
-        )
-
-        collection_value = (
-            request.form
-            .get(
-                "collection",
-                ""
-            )
-            .strip()
-        )
-
-        jewellery_type = (
-            request.form
-            .get(
-                "type",
-                ""
-            )
-            .strip()
-        )
-
-        description = (
-            request.form
-            .get(
-                "description",
-                ""
-            )
-            .strip()
-        )
-
-        # ----------------------------------------------------
-        # VALIDATE NAME
-        # ----------------------------------------------------
-
+        # --------------------------------------------------------
+        # VALIDATE
+        # --------------------------------------------------------
         if not name:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "Please enter the jewellery name.",
-                    "error": "Jewellery name is required.",
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # VALIDATE COLLECTION
-        # ----------------------------------------------------
-
-        collection = (
-            normalize_collection(
-                collection_value
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Please enter the jewellery name.",
+                        "error": "Jewellery name is required.",
+                    }
+                ),
+                400,
             )
-        )
 
+        collection = normalize_collection(collection_value)
         if not collection:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "Please select a collection.",
-                    "error": "Collection must be Gold or Prototype.",
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # VALIDATE TYPE
-        # ----------------------------------------------------
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Please select a valid collection.",
+                        "error": "Collection must be Gold or Prototype.",
+                    }
+                ),
+                400,
+            )
 
         if not jewellery_type:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "Please select a jewellery type.",
-                    "error": "Jewellery type is required.",
-                }
-            ), 400
-
-        if jewellery_type not in VALID_JEWELLERY_TYPES:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "Invalid jewellery type.",
-                    "error": "Please select a valid jewellery type.",
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # CHECK WHETHER A NEW IMAGE WAS PROVIDED
-        # ----------------------------------------------------
-
-        image_file = request.files.get("image")
-        has_new_image = bool(
-            image_file and image_file.filename
-        )
-
-        if has_new_image and not allowed_file(
-            image_file.filename
-        ):
-
-            return jsonify(
-                {
-                    "success": False,
-                    "message": "Unsupported image format.",
-                    "error": "Use JPG, JPEG, PNG, WEBP or BMP.",
-                }
-            ), 400
-
-        old_collection = get_item_collection(
-            existing_item
-        )
-
-        old_filename = get_item_filename(
-            existing_item
-        )
-
-        old_local_path = None
-
-        if old_collection and old_filename:
-
-            if old_collection == "gold":
-                old_directory = GOLD_DIR
-            else:
-                old_directory = PROTOTYPE_DIR
-
-            old_local_path = (
-                old_directory
-                / old_filename
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Please select a jewellery type.",
+                        "error": "Jewellery type is required.",
+                    }
+                ),
+                400,
             )
 
-        # ----------------------------------------------------
-        # BASIC UPDATE DATA
-        # ----------------------------------------------------
+        if jewellery_type not in VALID_JEWELLERY_TYPES:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Please select a valid jewellery type.",
+                        "error": "Invalid jewellery type.",
+                    }
+                ),
+                400,
+            )
 
+        image_file = request.files.get("image")
+
+        if image_file and image_file.filename:
+            if not allowed_file(image_file.filename):
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Unsupported image format.",
+                            "error": "Use JPG, JPEG, PNG, WEBP or BMP.",
+                        }
+                    ),
+                    400,
+                )
+
+        # --------------------------------------------------------
+        # TARGET MONGODB COLLECTION
+        # --------------------------------------------------------
+        target_mongo_collection = get_catalogue_collection(collection)
+
+        # --------------------------------------------------------
+        # PREPARE UPDATED IMAGE
+        # --------------------------------------------------------
+        image_changed = bool(image_file and image_file.filename)
+
+        if image_changed:
+            original_filename = secure_filename(image_file.filename)
+
+            if not original_filename:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Invalid image filename.",
+                            "error": "Invalid image filename.",
+                        }
+                    ),
+                    400,
+                )
+
+            target_directory = CATALOGUE_DIR / collection / jewellery_type
+            target_directory.mkdir(parents=True, exist_ok=True)
+
+            new_local_path = target_directory / original_filename
+
+            # Do not overwrite an existing file belonging to another item.
+            existing_item = target_mongo_collection.find_one(
+                {
+                    "image": original_filename,
+                    "id": {"$ne": item_id},
+                }
+            )
+
+            if existing_item:
+                stem = new_local_path.stem
+                suffix = new_local_path.suffix
+                counter = 1
+
+                while new_local_path.exists():
+                    new_local_path = target_directory / f"{stem}_{counter}{suffix}"
+                    counter += 1
+
+                original_filename = new_local_path.name
+
+            image_file.stream.seek(0)
+            image_bytes = image_file.read()
+
+            if not image_bytes:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "Uploaded image is empty.",
+                            "error": "Uploaded image is empty.",
+                        }
+                    ),
+                    400,
+                )
+
+            # Save local image.
+            with open(new_local_path, "wb") as output_file:
+                output_file.write(image_bytes)
+
+            # Save same image to GridFS using the same virtual path.
+            gridfs_relative_path = f"{collection}/{jewellery_type}/{original_filename}"
+
+            fs = get_gridfs()
+
+            new_gridfs_id = fs.put(
+                image_bytes,
+                filename=gridfs_relative_path,
+                content_type=(image_file.content_type or "application/octet-stream"),
+                collection=VALID_COLLECTIONS[collection],
+                jewellery_type=jewellery_type,
+                jewellery_id=item_id,
+                image_path=gridfs_relative_path,
+                uploaded_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+        else:
+            original_filename = get_item_filename(item)
+
+        # --------------------------------------------------------
+        # BUILD UPDATED DOCUMENT
+        # --------------------------------------------------------
         update_data = {
             "name": name,
             "collection": VALID_COLLECTIONS[collection],
@@ -1836,432 +1472,209 @@ def update_jewellery_item(item_id):
             "description": description,
         }
 
-        # ====================================================
-        # IMAGE UPDATE
-        # ====================================================
-
-        if has_new_image:
-
-            original_filename = secure_filename(
-                image_file.filename
-            )
-
-            if not original_filename:
-
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Invalid image filename.",
-                        "error": "Invalid image filename.",
-                    }
-                ), 400
-
-            if collection == "gold":
-                target_directory = GOLD_DIR
-            else:
-                target_directory = PROTOTYPE_DIR
-
-            target_directory.mkdir(
-                parents=True,
-                exist_ok=True
-            )
-
-            new_local_path = (
-                target_directory
-                / original_filename
-            )
-
-            if new_local_path.exists():
-
-                stem = new_local_path.stem
-                suffix = new_local_path.suffix
-                counter = 1
-
-                while new_local_path.exists():
-
-                    new_filename = (
-                        f"{stem}_{counter}{suffix}"
-                    )
-
-                    new_local_path = (
-                        target_directory
-                        / new_filename
-                    )
-
-                    counter += 1
-
-                original_filename = new_local_path.name
-
-            # ------------------------------------------------
-            # READ IMAGE ONCE
-            # ------------------------------------------------
-
-            image_file.stream.seek(0)
-
-            image_bytes = image_file.read()
-
-            if not image_bytes:
-
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Uploaded image is empty.",
-                        "error": "Uploaded image is empty.",
-                    }
-                ), 400
-
-            # ------------------------------------------------
-            # SAVE NEW LOCAL IMAGE
-            # ------------------------------------------------
-
-            with open(
-                new_local_path,
-                "wb"
-            ) as output_file:
-
-                output_file.write(
-                    image_bytes
-                )
-
-            print(
-                "Updated image saved locally:",
-                new_local_path
-            )
-
-            # ------------------------------------------------
-            # SAVE NEW IMAGE TO GRIDFS
-            # ------------------------------------------------
-
-            fs = get_gridfs()
-
-            content_type = (
-                image_file.content_type
-                or "application/octet-stream"
-            )
-
-            new_gridfs_id = fs.put(
-                image_bytes,
-                filename=original_filename,
-                content_type=content_type,
-                collection=collection,
-                jewellery_id=item_id,
-                uploaded_at=datetime.now(
-                    timezone.utc
-                ).isoformat(),
-            )
-
-            print(
-                "Updated image stored in GridFS:",
-                new_gridfs_id
-            )
-
+        if image_changed:
             update_data.update(
                 {
                     "image": original_filename,
                     "filename": original_filename,
-                    "image_path": str(new_local_path),
+                    "image_path": (
+                        f"{collection}/{jewellery_type}/{original_filename}"
+                    ),
                     "image_gridfs_id": new_gridfs_id,
-                    "ai_status": "pending",
-                    "ai_queued_at": datetime.now(
-                        timezone.utc
-                    ).isoformat(),
                 }
             )
 
-        # ====================================================
-        # SAVE MONGODB UPDATE
-        # ====================================================
+        # --------------------------------------------------------
+        # MOVE DOCUMENT BETWEEN GOLD / PROTOTYPE IF NEEDED
+        # --------------------------------------------------------
+        if old_collection != collection:
+            update_data["collection"] = VALID_COLLECTIONS[collection]
 
-        result = (
-            mongo_collection
-            .update_one(
+            target_mongo_collection.replace_one(
+                {"id": item_id},
                 {
-                    "id": item_id
+                    **item,
+                    **update_data,
                 },
-                {
-                    "$set": update_data
-                }
-            )
-        )
-
-        if result.matched_count == 0:
-
-            raise RuntimeError(
-                "Jewellery could not be updated."
+                upsert=True,
             )
 
-        # ----------------------------------------------------
-        # GET UPDATED ITEM
-        # ----------------------------------------------------
-
-        updated_item = (
-            mongo_collection
-            .find_one(
-                {
-                    "id": item_id
-                },
-                {
-                    "_id": 0
-                }
-            )
-        )
-
-        # ----------------------------------------------------
-        # CLEAN UP OLD IMAGE ONLY AFTER DB UPDATE
-        # ----------------------------------------------------
-
-        if has_new_image:
-
-            old_gridfs_id = get_gridfs_id(
-                existing_item
+            if target_mongo_collection.name != mongo_collection.name:
+                mongo_collection.delete_one({"id": item_id})
+        else:
+            mongo_collection.update_one(
+                {"id": item_id},
+                {"$set": update_data},
             )
 
-            if old_gridfs_id:
-
-                try:
-
-                    fs = get_gridfs()
-
-                    if fs.exists(old_gridfs_id):
-
-                        fs.delete(old_gridfs_id)
-
-                        print(
-                            "Deleted old GridFS image:",
-                            old_gridfs_id
-                        )
-
-                except Exception as grid_exc:
-
-                    print(
-                        "Old GridFS cleanup warning:",
-                        repr(grid_exc)
-                    )
-
-            if (
-                old_local_path
-                and old_local_path.exists()
-                and old_local_path != new_local_path
+        # --------------------------------------------------------
+        # DELETE OLD IMAGE ONLY AFTER DB UPDATE SUCCEEDS
+        # --------------------------------------------------------
+        if image_changed:
+            if old_gridfs_id and (
+                not new_gridfs_id or str(old_gridfs_id) != str(new_gridfs_id)
             ):
-
                 try:
+                    fs = get_gridfs()
+                    if fs.exists(old_gridfs_id):
+                        fs.delete(old_gridfs_id)
+                except Exception as grid_exc:
+                    print("Old GridFS delete warning:", repr(grid_exc))
 
-                    old_local_path.unlink()
-
-                    print(
-                        "Deleted old local image:",
-                        old_local_path
-                    )
-
+            if old_local_path and old_local_path.exists():
+                try:
+                    # Avoid deleting the new image if paths happen to match.
+                    if (
+                        new_local_path is None
+                        or old_local_path.resolve() != new_local_path.resolve()
+                    ):
+                        old_local_path.unlink()
                 except Exception as image_exc:
+                    print("Old local image delete warning:", repr(image_exc))
 
-                    print(
-                        "Old local image cleanup warning:",
-                        repr(image_exc)
-                    )
-
-            # ------------------------------------------------
-            # START AI WORKER ONLY WHEN IMAGE CHANGED
-            # ------------------------------------------------
-
-            try:
-
-                start_ai_worker()
-
-                print(
-                    "AI worker checked after jewellery image update."
-                )
-
-            except Exception as worker_exc:
-
-                print(
-                    "AI worker warning:",
-                    repr(worker_exc)
-                )
-
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        response_item = serialize_mongo_item(
-            updated_item
+        # --------------------------------------------------------
+        # FETCH UPDATED ITEM
+        # --------------------------------------------------------
+        updated_item = target_mongo_collection.find_one(
+            {"id": item_id},
+            {"_id": 0},
         )
 
-        return jsonify(
-            {
-                "success": True,
-                "message": (
-                    "Jewellery updated successfully."
+        if not updated_item:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "Jewellery was updated but could not be retrieved.",
+                        "error": "Updated jewellery record not found.",
+                    }
                 ),
-                "item": response_item,
-            }
-        ), 200
+                500,
+            )
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": "Jewellery updated successfully.",
+                    "item": serialize_mongo_item(updated_item),
+                }
+            ),
+            200,
+        )
 
     except Exception as exc:
-
-        print(
-            "Update jewellery error:",
-            repr(exc)
-        )
-
+        print("Update jewellery error:", repr(exc))
         traceback.print_exc()
 
-        # ----------------------------------------------------
-        # CLEANUP NEW FILE IF UPDATE FAILED
-        # ----------------------------------------------------
-
+        # Remove newly-created files if the update failed.
         if new_local_path:
-
             try:
-
                 if new_local_path.exists():
                     new_local_path.unlink()
-
             except Exception:
                 pass
 
         if new_gridfs_id:
-
             try:
-
                 fs = get_gridfs()
-
                 if fs.exists(new_gridfs_id):
                     fs.delete(new_gridfs_id)
-
             except Exception:
                 pass
 
-        return jsonify(
-            {
-                "success": False,
-                "message": "Unable to update jewellery.",
-                "error": str(exc),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Unable to update jewellery.",
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
 
 
 # ============================================================
-# UPDATE JEWELLERY COMPATIBILITY ROUTE
+# UPDATE CATALOGUE ITEM COMPATIBILITY
 # ============================================================
 
-@app.post(
-    "/api/jewellery/<item_id>"
-)
-def update_jewellery_compatibility(
-    item_id
-):
 
-    return update_jewellery_item(
-        item_id
-    )
-
-
-# ============================================================
-# UPDATE CATALOGUE COMPATIBILITY ROUTE
-# ============================================================
-
-@app.post(
-    "/api/catalogue/<item_id>"
-)
-def update_catalogue_item(
-    item_id
-):
-
-    return update_jewellery_item(
-        item_id
-    )
+@app.post("/api/catalogue/<item_id>")
+def update_catalogue_item(item_id):
+    return update_jewellery(item_id)
 
 
 # ============================================================
 # DELETE CATALOGUE ITEM
 # ============================================================
 
-@app.delete(
-    "/api/catalogue/<item_id>"
-)
-def delete_catalogue_item(
-    item_id
-):
 
-    return delete_jewellery_item(
-        item_id
-    )
+@app.delete("/api/catalogue/<item_id>")
+def delete_catalogue_item(item_id):
+
+    return delete_jewellery_item(item_id)
 
 
 # ============================================================
 # DELETE JEWELLERY COMPATIBILITY
 # ============================================================
 
-@app.delete(
-    "/api/jewellery/<item_id>"
-)
-def delete_jewellery_compatibility(
-    item_id
-):
 
-    return delete_jewellery_item(
-        item_id
-    )
+@app.delete("/api/jewellery/<item_id>")
+def delete_jewellery_compatibility(item_id):
+
+    return delete_jewellery_item(item_id)
 
 
 # ============================================================
 # SHARED DELETE FUNCTION
 # ============================================================
 
-def delete_jewellery_item(
-    item_id
-):
+
+def delete_jewellery_item(item_id):
 
     try:
 
-        mongo_collection = (
-            get_catalogue_collection()
-        )
-
         # ----------------------------------------------------
-        # FIND ITEM
+        # FIND ITEM IN GOLD OR PROTOTYPE COLLECTION
         # ----------------------------------------------------
 
-        item = (
-            mongo_collection
-            .find_one(
-                {
-                    "id": item_id
-                }
-            )
-        )
+        mongo_collection = None
+        item = None
+
+        for candidate_collection in get_catalogue_collections().values():
+            candidate = candidate_collection.find_one({"id": item_id})
+            if candidate:
+                mongo_collection = candidate_collection
+                item = candidate
+                break
 
         if not item:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Jewellery not found."
-                    ),
-                }
-            ), 404
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": ("Jewellery not found."),
+                    }
+                ),
+                404,
+            )
 
         # ----------------------------------------------------
         # GET LOCAL IMAGE
         # ----------------------------------------------------
 
-        collection = (
-            get_item_collection(item)
-        )
+        collection = get_item_collection(item)
 
-        filename = (
-            get_item_filename(item)
-        )
+        filename = get_item_filename(item)
 
         # ----------------------------------------------------
         # DELETE GRIDFS IMAGE
         # ----------------------------------------------------
 
-        gridfs_id = (
-            get_gridfs_id(item)
-        )
+        gridfs_id = get_gridfs_id(item)
 
         if gridfs_id:
 
@@ -2269,25 +1682,15 @@ def delete_jewellery_item(
 
                 fs = get_gridfs()
 
-                if fs.exists(
-                    gridfs_id
-                ):
+                if fs.exists(gridfs_id):
 
-                    fs.delete(
-                        gridfs_id
-                    )
+                    fs.delete(gridfs_id)
 
-                    print(
-                        "Deleted GridFS image:",
-                        gridfs_id
-                    )
+                    print("Deleted GridFS image:", gridfs_id)
 
             except Exception as grid_exc:
 
-                print(
-                    "GridFS delete warning:",
-                    repr(grid_exc)
-                )
+                print("GridFS delete warning:", repr(grid_exc))
 
         # ----------------------------------------------------
         # DELETE LOCAL IMAGE
@@ -2295,478 +1698,123 @@ def delete_jewellery_item(
 
         if collection and filename:
 
-            if collection == "gold":
+            image_path = get_item_local_path(item)
 
-                image_directory = GOLD_DIR
+            if image_path and image_path.exists():
 
-            elif collection == "prototype":
+                try:
 
-                image_directory = PROTOTYPE_DIR
+                    image_path.unlink()
 
-            else:
+                    print("Deleted local image:", image_path)
 
-                image_directory = None
+                except Exception as image_exc:
 
-            if image_directory:
-
-                image_path = (
-                    image_directory
-                    / filename
-                )
-
-                if image_path.exists():
-
-                    try:
-
-                        image_path.unlink()
-
-                        print(
-                            "Deleted local image:",
-                            image_path
-                        )
-
-                    except Exception as image_exc:
-
-                        print(
-                            "Image delete warning:",
-                            repr(image_exc)
-                        )
+                    print("Image delete warning:", repr(image_exc))
 
         # ----------------------------------------------------
         # DELETE MONGODB RECORD
         # ----------------------------------------------------
 
-        result = (
-            mongo_collection
-            .delete_one(
-                {
-                    "id": item_id
-                }
-            )
-        )
+        result = mongo_collection.delete_one({"id": item_id})
 
         if result.deleted_count == 0:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Jewellery could not be deleted."
-                    ),
-                }
-            ), 500
-
-        return jsonify(
-            {
-                "success": True,
-                "message": (
-                    "Jewellery deleted successfully."
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": ("Jewellery could not be deleted."),
+                    }
                 ),
-                "id": item_id,
-            }
-        ), 200
+                500,
+            )
+
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": ("Jewellery deleted successfully."),
+                    "id": item_id,
+                }
+            ),
+            200,
+        )
 
     except Exception as exc:
 
-        print(
-            "Delete jewellery error:",
-            repr(exc)
-        )
+        print("Delete jewellery error:", repr(exc))
 
         traceback.print_exc()
 
-        return jsonify(
-            {
-                "success": False,
-                "error": str(exc),
-            }
-        ), 500
-
-
-# ============================================================
-# JEWELLERY MATCHING
-# ============================================================
-
-@app.post("/api/match")
-def match():
-
-    query_path = None
-
-    try:
-
-        # ----------------------------------------------------
-        # IMAGE
-        # ----------------------------------------------------
-
-        image_file = (
-            request.files.get(
-                "image"
-            )
-        )
-
-        if not image_file:
-
-            return jsonify(
+        return (
+            jsonify(
                 {
                     "success": False,
-                    "error": (
-                        "Image is required."
-                    ),
+                    "error": str(exc),
                 }
-            ), 400
-
-        if not image_file.filename:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Invalid image."
-                    ),
-                }
-            ), 400
-
-        if not allowed_file(
-            image_file.filename
-        ):
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Unsupported image format."
-                    ),
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # SEARCH MODE
-        # ----------------------------------------------------
-
-        search_mode = (
-            request.form
-            .get(
-                "search_mode",
-                "all"
-            )
-            .strip()
-            .lower()
+            ),
+            500,
         )
-
-        valid_search_modes = {
-            "all",
-            "gold_to_prototype",
-            "prototype_to_gold",
-        }
-
-        if search_mode not in valid_search_modes:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Invalid search mode."
-                    ),
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # QUERY UPLOAD DIRECTORY
-        # ----------------------------------------------------
-
-        uploads_directory = (
-            DATABASE_DIR
-            / "uploads"
-        )
-
-        uploads_directory.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        # ----------------------------------------------------
-        # SECURE FILENAME
-        # ----------------------------------------------------
-
-        filename = secure_filename(
-            image_file.filename
-        )
-
-        if not filename:
-
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        "Invalid image filename."
-                    ),
-                }
-            ), 400
-
-        # ----------------------------------------------------
-        # AVOID COLLISION
-        # ----------------------------------------------------
-
-        query_path = (
-            uploads_directory
-            / filename
-        )
-
-        if query_path.exists():
-
-            stem = query_path.stem
-            suffix = query_path.suffix
-
-            counter = 1
-
-            while query_path.exists():
-
-                new_filename = (
-                    f"{stem}_{counter}{suffix}"
-                )
-
-                query_path = (
-                    uploads_directory
-                    / new_filename
-                )
-
-                counter += 1
-
-        # ----------------------------------------------------
-        # SAVE QUERY IMAGE
-        # ----------------------------------------------------
-
-        image_file.save(
-            query_path
-        )
-
-        print()
-
-        print(
-            "=" * 70
-        )
-
-        print(
-            "JEWELMATCH AI - MATCH REQUEST"
-        )
-
-        print(
-            "=" * 70
-        )
-
-        print(
-            "Query image:",
-            query_path
-        )
-
-        print(
-            "Search mode:",
-            search_mode
-        )
-
-        print(
-            "Top K:",
-            TOP_K
-        )
-
-        print(
-            "=" * 70
-        )
-
-        # ----------------------------------------------------
-        # RUN MATCHER
-        # ----------------------------------------------------
-
-        results = match_jewellery(
-            str(query_path),
-            top_k=TOP_K,
-            search_mode=search_mode,
-        )
-
-        # ----------------------------------------------------
-        # NORMALIZE RESPONSE
-        # ----------------------------------------------------
-
-        if isinstance(
-            results,
-            list
-        ):
-
-            results = [
-
-                serialize_mongo_item(
-                    item
-                )
-                if isinstance(
-                    item,
-                    dict
-                )
-                else item
-
-                for item in results
-
-            ]
-
-        elif isinstance(
-            results,
-            dict
-        ):
-
-            if isinstance(
-                results.get("results"),
-                list
-            ):
-
-                results["results"] = [
-
-                    serialize_mongo_item(
-                        item
-                    )
-                    if isinstance(
-                        item,
-                        dict
-                    )
-                    else item
-
-                    for item in results[
-                        "results"
-                    ]
-
-                ]
-
-            results["search_mode"] = (
-                search_mode
-            )
-
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        print(
-            "Matching completed successfully."
-        )
-
-        print(
-            "=" * 70
-        )
-
-        return jsonify(
-            {
-                "success": True,
-                "results": results,
-                "search_mode": search_mode,
-            }
-        ), 200
-
-    except Exception as exc:
-
-        print(
-            "Matching error:",
-            repr(exc)
-        )
-
-        traceback.print_exc()
-
-        return jsonify(
-            {
-                "success": False,
-                "matched": False,
-                "error": str(exc),
-                "results": [],
-            }
-        ), 500
-
-    finally:
-
-        # ----------------------------------------------------
-        # REMOVE QUERY IMAGE
-        # ----------------------------------------------------
-
-        if query_path:
-
-            try:
-
-                if query_path.exists():
-
-                    query_path.unlink()
-
-                    print(
-                        "Temporary query image deleted:",
-                        query_path
-                    )
-
-            except Exception as cleanup_exc:
-
-                print(
-                    "Query image cleanup warning:",
-                    repr(cleanup_exc)
-                )
 
 
 # ============================================================
 # REACT FRONTEND
 # ============================================================
 
-def frontend_response(
-    path=""
-):
+
+def frontend_response(path=""):
 
     # --------------------------------------------------------
     # API ROUTES MUST NOT GO TO REACT
     # --------------------------------------------------------
 
-    if path.startswith(
-        "api/"
-    ):
+    if path.startswith("api/"):
 
-        return jsonify(
-            {
-                "success": False,
-                "error": (
-                    "API endpoint not found."
-                ),
-            }
-        ), 404
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": ("API endpoint not found."),
+                }
+            ),
+            404,
+        )
 
     # --------------------------------------------------------
     # CATALOGUE IMAGE ROUTES MUST NOT GO TO REACT
     # --------------------------------------------------------
 
-    if path.startswith(
-        "catalogue-image/"
-    ):
+    if path.startswith("catalogue-image/"):
 
-        return jsonify(
-            {
-                "success": False,
-                "error": (
-                    "Catalogue image endpoint not found."
-                ),
-            }
-        ), 404
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": ("Catalogue image endpoint not found."),
+                }
+            ),
+            404,
+        )
 
     # --------------------------------------------------------
     # CHECK FRONTEND
     # --------------------------------------------------------
 
-    index_file = (
-        FRONTEND_DIST
-        / "index.html"
-    )
+    index_file = FRONTEND_DIST / "index.html"
 
     if not index_file.exists():
 
-        return jsonify(
-            {
-                "success": False,
-                "error": (
-                    "React frontend build was not found."
-                ),
-                "frontend_dist": str(
-                    FRONTEND_DIST
-                ),
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": ("React frontend build was not found."),
+                    "frontend_dist": str(FRONTEND_DIST),
+                }
+            ),
+            500,
+        )
 
     # --------------------------------------------------------
     # SERVE STATIC FILE
@@ -2774,58 +1822,43 @@ def frontend_response(
 
     if path:
 
-        requested_file = (
-            FRONTEND_DIST
-            / path
-        )
+        requested_file = FRONTEND_DIST / path
 
         try:
 
-            requested_file = (
-                requested_file.resolve()
-            )
+            requested_file = requested_file.resolve()
 
-            frontend_root = (
-                FRONTEND_DIST
-                .resolve()
-            )
+            frontend_root = FRONTEND_DIST.resolve()
 
-            requested_file.relative_to(
-                frontend_root
-            )
+            requested_file.relative_to(frontend_root)
 
         except ValueError:
 
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "Invalid path.",
-                }
-            ), 400
-
-        if (
-            requested_file.exists()
-            and requested_file.is_file()
-        ):
-
-            return send_from_directory(
-                str(FRONTEND_DIST),
-                path
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Invalid path.",
+                    }
+                ),
+                400,
             )
+
+        if requested_file.exists() and requested_file.is_file():
+
+            return send_from_directory(str(FRONTEND_DIST), path)
 
     # --------------------------------------------------------
     # REACT SPA FALLBACK
     # --------------------------------------------------------
 
-    return send_from_directory(
-        str(FRONTEND_DIST),
-        "index.html"
-    )
+    return send_from_directory(str(FRONTEND_DIST), "index.html")
 
 
 # ============================================================
 # ROOT
 # ============================================================
+
 
 @app.get("/")
 def home():
@@ -2837,88 +1870,91 @@ def home():
 # REACT ROUTES
 # ============================================================
 
-@app.route(
-    "/<path:path>"
-)
+
+@app.route("/<path:path>")
 def serve_frontend(path):
 
-    return frontend_response(
-        path
-    )
+    return frontend_response(path)
 
 
 # ============================================================
 # FILE TOO LARGE
 # ============================================================
 
+
 @app.errorhandler(413)
 def file_too_large(error):
 
-    return jsonify(
-        {
-            "success": False,
-            "error": (
-                "File is too large. "
-                "Maximum allowed size is 10 MB."
-            ),
-        }
-    ), 413
+    return (
+        jsonify(
+            {
+                "success": False,
+                "error": ("File is too large. " "Maximum allowed size is 10 MB."),
+            }
+        ),
+        413,
+    )
 
 
 # ============================================================
 # NOT FOUND
 # ============================================================
 
+
 @app.errorhandler(404)
 def not_found(error):
 
-    return jsonify(
-        {
-            "success": False,
-            "error": (
-                "Endpoint not found."
-            ),
-        }
-    ), 404
+    return (
+        jsonify(
+            {
+                "success": False,
+                "error": ("Endpoint not found."),
+            }
+        ),
+        404,
+    )
 
 
 # ============================================================
 # METHOD NOT ALLOWED
 # ============================================================
 
+
 @app.errorhandler(405)
 def method_not_allowed(error):
 
-    return jsonify(
-        {
-            "success": False,
-            "error": (
-                "Method not allowed."
-            ),
-        }
-    ), 405
+    return (
+        jsonify(
+            {
+                "success": False,
+                "error": ("Method not allowed."),
+            }
+        ),
+        405,
+    )
 
 
 # ============================================================
 # GENERAL ERROR
 # ============================================================
 
+
 @app.errorhandler(Exception)
 def handle_general_error(error):
 
-    print(
-        "Unhandled application error:",
-        repr(error)
-    )
+    print("Unhandled application error:", repr(error))
 
     traceback.print_exc()
 
-    return jsonify(
-        {
-            "success": False,
-            "error": str(error),
-        }
-    ), 500
+    return (
+        jsonify(
+            {
+                "success": False,
+                "error": str(error),
+            }
+        ),
+        500,
+    )
 
 
 # ============================================================
@@ -2927,88 +1963,35 @@ def handle_general_error(error):
 
 if __name__ == "__main__":
 
-    print(
-        "=" * 70
-    )
+    print("=" * 70)
 
-    print(
-        "JEWELMATCH AI BACKEND"
-    )
+    print("JEWELMATCH AI BACKEND")
 
-    print(
-        "=" * 70
-    )
+    print("=" * 70)
 
-    print(
-        "Gold catalogue directory:"
-    )
+    # Make sure the complete collection/type directory tree exists
+    # whenever the backend starts.
+    ensure_catalogue_directories()
 
-    print(
-        GOLD_DIR
-    )
+    print("Gold catalogue directory:")
 
-    print(
-        "Prototype catalogue directory:"
-    )
+    print(GOLD_DIR)
 
-    print(
-        PROTOTYPE_DIR
-    )
+    print("Prototype catalogue directory:")
 
-    print(
-        "MongoDB connected:",
-        test_mongodb_connection()
-    )
+    print(PROTOTYPE_DIR)
 
-    print(
-        "DINO index exists:",
-        DINO_INDEX.exists()
-    )
+    print("MongoDB connected:", test_mongodb_connection())
 
-    print(
-        "Top K matches:",
-        TOP_K
-    )
+    print("Top K matches:", TOP_K)
 
-    print(
-        "Frontend directory:",
-        FRONTEND_DIST
-    )
+    print("Frontend directory:", FRONTEND_DIST)
 
-    print(
-        "Frontend index exists:",
-        (
-            FRONTEND_DIST
-            / "index.html"
-        ).exists()
-    )
+    print("Frontend index exists:", (FRONTEND_DIST / "index.html").exists())
 
-    print(
-        "GridFS enabled: True"
-    )
+    print("GridFS enabled: True")
 
-    print(
-        "=" * 70
-    )
-
-    # --------------------------------------------------------
-    # START AI WORKER
-    # --------------------------------------------------------
-
-    try:
-
-        start_ai_worker()
-
-        print(
-            "AI background worker started."
-        )
-
-    except Exception as exc:
-
-        print(
-            "AI worker warning:",
-            repr(exc)
-        )
+    print("=" * 70)
 
     # --------------------------------------------------------
     # START FLASK
