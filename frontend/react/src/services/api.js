@@ -322,7 +322,7 @@ export async function getJewelleryTypes() {
 //   prototype_to_gold   -> Prototype input to Gold catalogue
 // ============================================================
 
-export async function matchJewellery(image, searchMode = "all", topK = 8) {
+export async function matchJewellery(image, searchMode = "all", topK = 12) {
   if (!image) {
     throw new Error("Please upload or capture a jewellery image first.");
   }

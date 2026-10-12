@@ -1178,11 +1178,11 @@
   color: #796b5d;
   line-height: 1.7;
 }
-
+/* Compact, image-focused jewellery search results */
 .search-results-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 22px;
+  gap: 10px;
 }
 
 .search-result-card {
@@ -1205,13 +1205,18 @@
 }
 
 .search-result-image {
-  position: relative;
+  width: 100%;
+  height: 190px;
+  padding: 5px;
+  border: 0;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1 / 1;
+  position: relative;
   overflow: hidden;
-  background: #f5f0e7;
+  cursor: zoom-in;
+  background: #f8f4ee;
 }
 
 .search-result-image img {
@@ -1404,6 +1409,202 @@
   .search-result-card,
   .search-result-image img,
   .search-similarity-fill {
+    transition: none;
+  }
+}
+
+/* =========================================================
+   JEWELLERY SEARCH RESULTS — COMPACT RESPONSIVE LAYOUT
+   ========================================================= */
+
+.search-results-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.search-result-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(157, 125, 77, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.96);
+  box-shadow: 0 4px 14px rgba(65, 47, 28, 0.06);
+}
+
+.search-result-image {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 190px;
+  padding: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #f8f4ee;
+  cursor: zoom-in;
+}
+
+.search-result-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 5px;
+  object-fit: contain;
+  transition: transform 0.25s ease;
+}
+
+.search-result-card:hover .search-result-image img {
+  transform: scale(1.04);
+}
+
+.search-similarity-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(61, 45, 28, 0.85);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.search-result-details {
+  padding: 8px;
+}
+
+.search-result-details h3 {
+  margin: 0 0 4px;
+  overflow: hidden;
+  color: #392b20;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-id {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #92703b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Keep cards focused on the jewellery image */
+.search-result-collection,
+.search-result-type,
+.search-similarity {
+  display: none;
+}
+
+/* Fallback when an image cannot load */
+.search-image-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  color: #927a59;
+  text-align: center;
+}
+
+.search-image-fallback-hidden {
+  display: none;
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  .search-results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .search-result-image {
+    height: 155px;
+  }
+
+  .search-result-details {
+    padding: 7px;
+  }
+}
+
+/* Mobile: three jewellery designs per row */
+@media (max-width: 650px) {
+  .search-results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .search-result-card {
+    border-radius: 9px;
+  }
+
+  .search-result-image {
+    height: 125px;
+    padding: 2px;
+  }
+
+  .search-result-image img {
+    padding: 3px;
+  }
+
+  .search-similarity-badge {
+    top: 4px;
+    right: 4px;
+    padding: 3px 4px;
+    font-size: 8px;
+  }
+
+  .search-result-details {
+    padding: 5px;
+  }
+
+  .search-result-details h3 {
+    margin-bottom: 3px;
+    font-size: 10px;
+  }
+
+  .search-result-id {
+    font-size: 9px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .search-results-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .search-result-image {
+    height: 100px;
+  }
+
+  .search-result-details {
+    padding: 4px;
+  }
+
+  .search-result-details h3 {
+    font-size: 9px;
+  }
+
+  .search-result-id {
+    font-size: 8px;
+  }
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .search-result-card,
+  .search-result-image img {
     transition: none;
   }
 }

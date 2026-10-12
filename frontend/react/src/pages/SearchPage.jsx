@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import Header from "../components/Header";
@@ -16,12 +16,14 @@ function SearchPage() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedResult, setSelectedResult] = useState(null);
 
   function handleImageChange(image) {
     setSelectedImage(image);
     setMessage("");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
   }
 
   function handleSearchModeChange(mode) {
@@ -29,6 +31,7 @@ function SearchPage() {
     setMessage("");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
   }
 
   async function handleSearch() {
@@ -43,9 +46,10 @@ function SearchPage() {
     setMessage("Analysing your jewellery image and finding similar designs...");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
 
     try {
-      const data = await matchJewellery(selectedImage, searchMode, 8);
+      const data = await matchJewellery(selectedImage, searchMode, 12);
       const matchedResults = Array.isArray(data?.results) ? data.results : [];
 
       setResults(matchedResults);
@@ -67,6 +71,7 @@ function SearchPage() {
         error.message ||
           "Unable to complete the jewellery search. Please try again.",
       );
+      setHasSearched(true);
     } finally {
       setLoading(false);
     }
@@ -89,7 +94,6 @@ function SearchPage() {
       return null;
     }
 
-    // Scores between 0 and 1 are treated as proportions.
     const percentage =
       numericScore >= 0 && numericScore <= 1
         ? numericScore * 100
@@ -110,13 +114,10 @@ function SearchPage() {
       return null;
     }
 
-    // Preserve complete external URLs.
     if (/^https?:\/\//i.test(imageValue)) {
       return imageValue;
     }
 
-    // Handle a stored GridFS image if the result includes its ID.
-    // const gridFsId = item.gridfs_id || item.image_id || item.image_file_id;
     const gridFsId =
       item.image_gridfs_id ||
       item.gridfs_id ||
@@ -129,10 +130,8 @@ function SearchPage() {
       )}`;
     }
 
-    // Convert Windows paths to URL-style paths.
     const normalisedPath = imageValue.replace(/\\/g, "/");
 
-    // The model service serves catalogue files from this route.
     if (normalisedPath.includes("/catalogue/")) {
       const cataloguePath = normalisedPath.split("/catalogue/").pop();
 
@@ -144,14 +143,12 @@ function SearchPage() {
       }
     }
 
-    // Handle relative image URLs already provided by the API.
     if (normalisedPath.startsWith("/")) {
       return apiUrl(normalisedPath);
     }
 
-    // Handle a relative filename with a known collection.
     const collection =
-      item.collection || item.matched_collection || item.source_collection;
+      item.matched_collection || item.collection || item.source_collection;
 
     if (
       collection &&
@@ -186,6 +183,7 @@ function SearchPage() {
 
   function getItemId(item) {
     return (
+      item.design_id ||
       item.jewellery_id ||
       item.item_id ||
       item.id ||
@@ -217,6 +215,35 @@ function SearchPage() {
     return String(collection);
   }
 
+  function openResultDetails(item) {
+    setSelectedResult(item);
+    document.body.classList.add("catalogue-overlay-open");
+  }
+
+  function closeResultDetails() {
+    setSelectedResult(null);
+    document.body.classList.remove("catalogue-overlay-open");
+  }
+
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        closeResultDetails();
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.classList.remove("catalogue-overlay-open");
+    };
+  }, []);
+
+  const selectedResultImageUrl = selectedResult
+    ? getImageUrl(selectedResult)
+    : null;
+
   return (
     <div className="search-page">
       <Header />
@@ -234,7 +261,6 @@ function SearchPage() {
           <div className="search-step">
             <div className="search-step-heading">
               <span>01</span>
-
               <div>
                 <h2>Choose search mode</h2>
               </div>
@@ -249,7 +275,6 @@ function SearchPage() {
           <div className="search-step">
             <div className="search-step-heading">
               <span>02</span>
-
               <div>
                 <h2>Add jewellery image</h2>
               </div>
@@ -270,7 +295,6 @@ function SearchPage() {
             <span>
               {loading ? "Finding Matches..." : "Find Similar Jewellery"}
             </span>
-
             <strong>{loading ? "…" : "→"}</strong>
           </button>
 
@@ -307,18 +331,23 @@ function SearchPage() {
                 const imageUrl = getImageUrl(item);
                 const similarity = getSimilarity(item);
                 const itemId = getItemId(item);
-                const collection = getCollection(item);
+                const name = getItemName(item, index);
 
                 return (
                   <article
                     className="search-result-card"
                     key={`${itemId || "design"}-${index}`}
                   >
-                    <div className="search-result-image">
-                      {imageUrl ? (
+                    <button
+                      type="button"
+                      className="search-result-image"
+                      onClick={() => openResultDetails(item)}
+                      aria-label={`View ${name} details`}
+                    >
+                      {imageUrl && (
                         <img
                           src={imageUrl}
-                          alt={getItemName(item, index)}
+                          alt={name}
                           loading="lazy"
                           onError={(event) => {
                             event.currentTarget.style.display = "none";
@@ -327,7 +356,7 @@ function SearchPage() {
                             );
                           }}
                         />
-                      ) : null}
+                      )}
 
                       <div
                         className={`search-image-fallback ${
@@ -335,7 +364,7 @@ function SearchPage() {
                         }`}
                       >
                         <span>✦</span>
-                        <p>Jewellery image unavailable</p>
+                        <p>No image</p>
                       </div>
 
                       {similarity !== null && (
@@ -343,41 +372,13 @@ function SearchPage() {
                           {similarity.toFixed(1)}% match
                         </div>
                       )}
-                    </div>
+                    </button>
 
                     <div className="search-result-details">
-                      <h3>{getItemName(item, index)}</h3>
+                      <h3 title={name}>{name}</h3>
 
                       {itemId && (
                         <p className="search-result-id">ID: {String(itemId)}</p>
-                      )}
-
-                      {collection && (
-                        <span className="search-result-collection">
-                          {collection}
-                        </span>
-                      )}
-
-                      {(item.type || item.jewellery_type) && (
-                        <p className="search-result-type">
-                          Type: {item.type || item.jewellery_type}
-                        </p>
-                      )}
-
-                      {similarity !== null && (
-                        <div className="search-similarity">
-                          <div className="search-similarity-label">
-                            <span>Similarity score</span>
-                            <strong>{similarity.toFixed(1)}%</strong>
-                          </div>
-
-                          <div className="search-similarity-track">
-                            <div
-                              className="search-similarity-fill"
-                              style={{ width: `${similarity}%` }}
-                            />
-                          </div>
-                        </div>
                       )}
                     </div>
                   </article>
@@ -445,6 +446,86 @@ function SearchPage() {
 
         <div>© 2026 JewelMatch AI</div>
       </footer>
+
+      {selectedResult && (
+        <div
+          className="catalogue-details-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeResultDetails();
+            }
+          }}
+        >
+          <div
+            className="catalogue-details-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Jewellery details"
+          >
+            <button
+              type="button"
+              className="catalogue-details-close"
+              onClick={closeResultDetails}
+              aria-label="Close jewellery details"
+            >
+              ×
+            </button>
+
+            <div className="catalogue-details-image">
+              {selectedResultImageUrl ? (
+                <img
+                  src={selectedResultImageUrl}
+                  alt={getItemName(selectedResult, 0)}
+                />
+              ) : (
+                <div className="catalogue-details-no-image">
+                  No image available
+                </div>
+              )}
+            </div>
+
+            <div className="catalogue-details-content">
+              <span className="catalogue-details-collection">
+                {getCollection(selectedResult) || "Jewellery"}
+              </span>
+
+              <h2>{getItemName(selectedResult, 0)}</h2>
+
+              <div className="catalogue-details-id">
+                <span>Design ID</span>
+                <strong>{getItemId(selectedResult) || "—"}</strong>
+              </div>
+
+              <div className="catalogue-details-info-grid">
+                <div className="catalogue-details-info">
+                  <span>Type</span>
+                  <strong>
+                    {selectedResult.type ||
+                      selectedResult.jewellery_type ||
+                      "—"}
+                  </strong>
+                </div>
+
+                <div className="catalogue-details-info">
+                  <span>Similarity</span>
+                  <strong>
+                    {getSimilarity(selectedResult) !== null
+                      ? `${getSimilarity(selectedResult).toFixed(1)}%`
+                      : "—"}
+                  </strong>
+                </div>
+              </div>
+
+              {selectedResult.description && (
+                <div className="catalogue-details-description">
+                  <span>Description</span>
+                  <p>{selectedResult.description}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
