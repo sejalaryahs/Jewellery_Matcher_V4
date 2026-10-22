@@ -1633,11 +1633,8 @@ function SearchPage() {
 
   // Initial countdown: 90 seconds.
   const [cooldownSeconds, setCooldownSeconds] = useState(90);
-
-  // Store the active countdown interval.
   const cooldownTimerRef = useRef(null);
 
-  // Start or restart the countdown.
   function startCooldown(duration) {
     if (cooldownTimerRef.current) {
       clearInterval(cooldownTimerRef.current);
@@ -1651,11 +1648,9 @@ function SearchPage() {
 
       setCooldownSeconds(remaining);
 
-      if (remaining <= 0) {
-        if (cooldownTimerRef.current) {
-          clearInterval(cooldownTimerRef.current);
-          cooldownTimerRef.current = null;
-        }
+      if (remaining <= 0 && cooldownTimerRef.current) {
+        clearInterval(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
       }
     };
 
@@ -1665,7 +1660,11 @@ function SearchPage() {
     cooldownTimerRef.current = setInterval(updateCountdown, 250);
   }
 
-  // Start the initial 90-second countdown when SearchPage opens.
+  function closeResultDetails() {
+    setSelectedResult(null);
+  }
+
+  // Start countdown and clean up the timer when the page unmounts.
   useEffect(() => {
     startCooldown(90);
 
@@ -1674,14 +1673,39 @@ function SearchPage() {
         clearInterval(cooldownTimerRef.current);
         cooldownTimerRef.current = null;
       }
+      document.body.classList.remove("catalogue-overlay-open");
     };
   }, []);
+
+  // Close the popup with Escape and prevent background scrolling.
+  useEffect(() => {
+    if (!selectedResult) {
+      document.body.classList.remove("catalogue-overlay-open");
+      return undefined;
+    }
+
+    document.body.classList.add("catalogue-overlay-open");
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        closeResultDetails();
+      }
+    }
+
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.classList.remove("catalogue-overlay-open");
+    };
+  }, [selectedResult]);
 
   function handleImageChange(image) {
     setSelectedImage(image);
     setMessage("");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
   }
 
   function handleSearchModeChange(mode) {
@@ -1689,12 +1713,11 @@ function SearchPage() {
     setMessage("");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
   }
 
   async function handleSearch() {
-    if (cooldownSeconds > 0) {
-      return;
-    }
+    if (cooldownSeconds > 0) return;
 
     if (!selectedImage) {
       setMessage("Please upload or capture a jewellery image first.");
@@ -1707,9 +1730,10 @@ function SearchPage() {
     setMessage("Analysing your jewellery image and finding similar designs...");
     setResults([]);
     setHasSearched(false);
+    closeResultDetails();
 
     try {
-      // Existing matching API call preserved.
+      // Preserve the existing matching API and search modes.
       const data = await matchJewellery(selectedImage, searchMode, 12);
 
       const matchedResults = Array.isArray(data?.results) ? data.results : [];
@@ -1727,7 +1751,7 @@ function SearchPage() {
         );
       }
 
-      // Start a fresh 60-second countdown after the search succeeds.
+      // Start a fresh 60-second countdown after a successful API response.
       startCooldown(60);
     } catch (error) {
       console.error("Jewellery matching error:", error);
@@ -1739,31 +1763,6 @@ function SearchPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function getSimilarity(item) {
-    const rawScore =
-      item.similarity ??
-      item.score ??
-      item.match_score ??
-      item.similarity_score;
-
-    if (rawScore === undefined || rawScore === null) {
-      return null;
-    }
-
-    const numericScore = Number(rawScore);
-
-    if (!Number.isFinite(numericScore)) {
-      return null;
-    }
-
-    const percentage =
-      numericScore >= 0 && numericScore <= 1
-        ? numericScore * 100
-        : numericScore;
-
-    return Math.max(0, Math.min(100, percentage));
   }
 
   function getImageUrl(item) {
@@ -1778,7 +1777,7 @@ function SearchPage() {
       return null;
     }
 
-    // Preserve complete external URLs.
+    // Keep complete external URLs unchanged.
     if (/^https?:\/\//i.test(imageValue)) {
       return imageValue;
     }
@@ -1796,7 +1795,6 @@ function SearchPage() {
       )}`;
     }
 
-    // Convert Windows paths to URL-style paths.
     const normalisedPath = imageValue.replace(/\\/g, "/");
 
     // Handle paths containing /catalogue/.
@@ -1816,7 +1814,7 @@ function SearchPage() {
       return apiUrl(normalisedPath);
     }
 
-    // Handle a relative filename with a known collection.
+    // Handle relative filenames with a known collection.
     const collection =
       item.collection || item.matched_collection || item.source_collection;
 
@@ -1884,6 +1882,16 @@ function SearchPage() {
     return String(collection);
   }
 
+  function openResultDetails(item, index) {
+    setSelectedResult({
+      item,
+      imageUrl: getImageUrl(item),
+      name: getItemName(item, index),
+      id: getItemId(item),
+      collection: getCollection(item),
+    });
+  }
+
   const formattedCooldown = `${Math.floor(
     cooldownSeconds / 60,
   )}:${String(cooldownSeconds % 60).padStart(2, "0")}`;
@@ -1930,8 +1938,6 @@ function SearchPage() {
             />
           </div>
 
-          {/* Find Similar button with initial 90-second
-              and post-search 60-second countdowns. */}
           <button
             type="button"
             className="find-match-button"
@@ -1980,8 +1986,8 @@ function SearchPage() {
             <div className="search-results-grid">
               {results.map((item, index) => {
                 const imageUrl = getImageUrl(item);
-                const similarity = getSimilarity(item);
                 const itemId = getItemId(item);
+                const name = getItemName(item, index);
                 const collection = getCollection(item);
 
                 return (
@@ -1989,21 +1995,25 @@ function SearchPage() {
                     className="search-result-card"
                     key={`${itemId || "design"}-${index}`}
                   >
-                    <div className="search-result-image">
-                      {imageUrl ? (
+                    <button
+                      type="button"
+                      className="search-result-image"
+                      onClick={() => openResultDetails(item, index)}
+                      aria-label={`View details for ${name}`}
+                    >
+                      {imageUrl && (
                         <img
                           src={imageUrl}
-                          alt={getItemName(item, index)}
+                          alt={name}
                           loading="lazy"
                           onError={(event) => {
                             event.currentTarget.style.display = "none";
-
                             event.currentTarget.nextElementSibling?.classList.remove(
                               "search-image-fallback-hidden",
                             );
                           }}
                         />
-                      ) : null}
+                      )}
 
                       <div
                         className={`search-image-fallback ${
@@ -2013,16 +2023,10 @@ function SearchPage() {
                         <span>✦</span>
                         <p>Jewellery image unavailable</p>
                       </div>
-
-                      {similarity !== null && (
-                        <div className="search-similarity-badge">
-                          {similarity.toFixed(1)}% match
-                        </div>
-                      )}
-                    </div>
+                    </button>
 
                     <div className="search-result-details">
-                      <h3>{getItemName(item, index)}</h3>
+                      <h3 title={name}>{name}</h3>
 
                       {itemId && (
                         <p className="search-result-id">ID: {String(itemId)}</p>
@@ -2038,22 +2042,6 @@ function SearchPage() {
                         <p className="search-result-type">
                           Type: {item.type || item.jewellery_type}
                         </p>
-                      )}
-
-                      {similarity !== null && (
-                        <div className="search-similarity">
-                          <div className="search-similarity-label">
-                            <span>Similarity score</span>
-                            <strong>{similarity.toFixed(1)}%</strong>
-                          </div>
-
-                          <div className="search-similarity-track">
-                            <div
-                              className="search-similarity-fill"
-                              style={{ width: `${similarity}%` }}
-                            />
-                          </div>
-                        </div>
                       )}
                     </div>
                   </article>
@@ -2121,6 +2109,84 @@ function SearchPage() {
 
         <div>© 2026 JewelMatch AI</div>
       </footer>
+
+      {/* Jewellery result overlay popup */}
+      {selectedResult && (
+        <div
+          className="catalogue-details-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeResultDetails();
+            }
+          }}
+        >
+          <div
+            className="catalogue-details-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="search-result-modal-title"
+          >
+            <button
+              type="button"
+              className="catalogue-details-close"
+              onClick={closeResultDetails}
+              aria-label="Close jewellery details"
+            >
+              ×
+            </button>
+
+            <div className="catalogue-details-image">
+              {selectedResult.imageUrl ? (
+                <img src={selectedResult.imageUrl} alt={selectedResult.name} />
+              ) : (
+                <div className="catalogue-details-no-image">
+                  Jewellery image unavailable
+                </div>
+              )}
+            </div>
+
+            <div className="catalogue-details-content">
+              <span className="catalogue-details-collection">
+                {selectedResult.collection || "Jewellery"}
+              </span>
+
+              <h2 id="search-result-modal-title">{selectedResult.name}</h2>
+
+              <div className="catalogue-details-id">
+                <span>Design ID</span>
+                <strong>
+                  {selectedResult.id ? String(selectedResult.id) : "—"}
+                </strong>
+              </div>
+
+              <div className="catalogue-details-info-grid">
+                <div className="catalogue-details-info">
+                  <span>Type</span>
+                  <strong>
+                    {selectedResult.item.type ||
+                      selectedResult.item.jewellery_type ||
+                      "—"}
+                  </strong>
+                </div>
+
+                <div className="catalogue-details-info">
+                  <span>Collection</span>
+                  <strong>{selectedResult.collection || "—"}</strong>
+                </div>
+              </div>
+
+              {selectedResult.item.description && (
+                <div className="catalogue-details-description">
+                  <span>Description</span>
+                  <p>{selectedResult.item.description}</p>
+                </div>
+              )}
+
+              
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

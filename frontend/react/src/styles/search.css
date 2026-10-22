@@ -1608,3 +1608,243 @@
     transition: none;
   }
 }
+
+/* =========================================================
+   JEWELLERY IMAGE CROPPER
+========================================================= */
+
+.crop-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  overflow-y: auto;
+  background: rgba(34, 27, 21, 0.72);
+  backdrop-filter: blur(7px);
+}
+
+.crop-modal {
+  width: min(620px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border: 1px solid rgba(185, 133, 50, 0.22);
+  border-radius: 20px;
+  background: #fffaf3;
+  color: #302820;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.28);
+}
+
+.crop-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+}
+
+.crop-eyebrow {
+  color: #a97429;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.crop-modal-header h2 {
+  margin: 6px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  line-height: 1.25;
+}
+
+.crop-modal-header p {
+  margin: 0;
+  color: #8d8177;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.crop-close-button {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f1e5d5;
+  color: #604a32;
+  font-size: 25px;
+  cursor: pointer;
+}
+
+.crop-editor {
+  position: relative;
+  width: calc(100% - 36px);
+  height: min(58vh, 430px);
+  min-height: 260px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #211e1a;
+}
+
+.crop-editor .reactEasyCrop_Container {
+  border-radius: 12px;
+}
+
+.crop-controls {
+  padding: 18px 22px 8px;
+}
+
+.crop-controls label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: #604a32;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.crop-controls label span {
+  color: #a97429;
+  font-variant-numeric: tabular-nums;
+}
+
+.crop-controls input[type="range"] {
+  display: block;
+  width: 100%;
+  accent-color: #a97429;
+  cursor: pointer;
+}
+
+.crop-controls p {
+  margin: 10px 0 0;
+  color: #8d8177;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.crop-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px 22px;
+}
+
+.crop-modal-actions button {
+  min-height: 42px;
+  padding: 10px 17px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.crop-cancel-button {
+  border: 1px solid rgba(185, 133, 50, 0.3);
+  background: #fffdf9;
+  color: #795820;
+}
+
+.crop-apply-button {
+  border: 1px solid #a97429;
+  background: #a97429;
+  color: #fff;
+}
+
+.crop-cancel-button:hover,
+.crop-apply-button:hover {
+  transform: translateY(-1px);
+}
+
+.crop-apply-button:disabled,
+.crop-cancel-button:disabled,
+.crop-close-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.crop-error,
+.crop-inline-error {
+  margin: 8px 22px;
+  color: #963e32;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.crop-inline-error {
+  margin: 12px 0 0;
+}
+
+.image-preview-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.image-preview-actions .change-image-button {
+  border-right: 1px solid rgba(185, 133, 50, 0.12);
+}
+
+.recrop-image-button {
+  padding: 9px;
+  border: 0;
+  border-top: 1px solid rgba(185, 133, 50, 0.1);
+  background: #fcfaf6;
+  color: #946722;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.crop-close-button:hover,
+.recrop-image-button:hover,
+.change-image-button:hover {
+  background-color: #f8efdf;
+}
+
+@media (max-width: 520px) {
+  .crop-modal-overlay {
+    padding: 10px;
+  }
+
+  .crop-modal {
+    max-height: calc(100dvh - 20px);
+    border-radius: 15px;
+  }
+
+  .crop-modal-header {
+    padding: 16px 16px 12px;
+  }
+
+  .crop-modal-header h2 {
+    font-size: 21px;
+  }
+
+  .crop-editor {
+    width: calc(100% - 24px);
+    height: min(48vh, 360px);
+    min-height: 230px;
+  }
+
+  .crop-controls {
+    padding: 16px 16px 6px;
+  }
+
+  .crop-modal-actions {
+    padding: 12px 16px 16px;
+  }
+
+  .crop-modal-actions button {
+    flex: 1;
+    padding: 10px;
+  }
+}

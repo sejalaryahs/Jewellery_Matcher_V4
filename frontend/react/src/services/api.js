@@ -222,29 +222,35 @@
 // API CONFIGURATION
 // ============================================================
 
+// ###############################################
+// 2model integration
+// ##########################################
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
+// Model 1 — existing jewellery matcher
 const MODEL_API_URL =
   import.meta.env.VITE_MODEL_API_URL ||
   "https://jewelmatchai-model.onrender.com";
+
+// Model 2 — Segmented DINOv2 ONNX matcher
+const MODEL2_API_URL =
+  import.meta.env.VITE_MODEL2_API_URL ||
+  "https://jewelmatchai-model-1.onrender.com";
 
 // ============================================================
 // COMMON HELPERS
 // ============================================================
 
 export function apiUrl(path) {
-  if (!path) {
-    return API_BASE_URL;
-  }
+  if (!path) return API_BASE_URL;
 
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
 
-  const normalisedPath = path.startsWith("/") ? path : "/" + path;
-
-  return API_BASE_URL + normalisedPath;
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 async function parseResponse(response) {
@@ -260,11 +266,11 @@ async function parseResponse(response) {
     throw new Error(
       data?.error ||
         data?.message ||
-        "Request failed with status " + response.status + ".",
+        `Request failed with status ${response.status}.`,
     );
   }
 
-  if (data?.success === false) {
+  if (data?.success === false || data?.status === "error") {
     throw new Error(
       data.error || data.message || "The request could not be completed.",
     );
@@ -272,37 +278,71 @@ async function parseResponse(response) {
 
   return data;
 }
-
 async function fetchWithErrorHandling(url, options = {}) {
+  console.log("[API REQUEST]", options.method || "GET", url);
+
   let response;
 
   try {
     response = await fetch(url, options);
   } catch (error) {
-    console.error("API connection error:", error);
+    console.error("[API NETWORK ERROR]", {
+      url,
+      name: error.name,
+      message: error.message,
+      error,
+    });
 
     throw new Error(
-      "Unable to connect to the server. Please check your connection and try again.",
+      `Request failed: ${error.message}. Check the browser console and Network tab.`,
     );
   }
 
-  return parseResponse(response);
+  console.log("[API STATUS]", response.status, url);
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      `Server returned an unreadable response (HTTP ${response.status}).`,
+    );
+  }
+
+  console.log("[API BODY]", url, data);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.message ||
+        data?.error ||
+        `Request failed with HTTP ${response.status}.`,
+    );
+  }
+
+  if (data?.success === false || data?.status === "error") {
+    throw new Error(
+      data.message || data.error || "The request could not be completed.",
+    );
+  }
+
+  return data;
 }
 
 // ============================================================
-// MAIN APPLICATION HEALTH
+// HEALTH
 // ============================================================
 
 export async function checkHealth() {
   return fetchWithErrorHandling(apiUrl("/api/health"));
 }
 
-// ============================================================
-// AI MODEL SERVICE HEALTH
-// ============================================================
-
 export async function checkModelHealth() {
-  return fetchWithErrorHandling(MODEL_API_URL + "/api/health");
+  return fetchWithErrorHandling(`${MODEL_API_URL}/api/health`);
+}
+
+export async function checkModel2Health() {
+  return fetchWithErrorHandling(`${MODEL2_API_URL}/api/health`);
 }
 
 // ============================================================
@@ -314,15 +354,88 @@ export async function getJewelleryTypes() {
 }
 
 // ============================================================
-// AI JEWELLERY MATCHING
-//
-// Supported search modes:
-//   all                 -> Search both directions
-//   gold_to_prototype   -> Gold input to Prototype catalogue
-//   prototype_to_gold   -> Prototype input to Gold catalogue
+// MATCHING HELPERS
 // ============================================================
 
-export async function matchJewellery(image, searchMode = "all", topK = 12) {
+async function matchWithModel(modelUrl, image, source, topK, modelName) {
+  const formData = new FormData();
+
+  formData.append("image", image, image.name || "jewellery-image.jpg");
+  formData.append("source", source);
+  formData.append("top_k", String(topK));
+
+  const data = await fetchWithErrorHandling(`${modelUrl}/api/match`, {
+    method: "POST",
+    body: formData,
+  });
+
+  // Model 1 returns results; Model 2 may return matches.
+  const items = Array.isArray(data.results)
+    ? data.results
+    : Array.isArray(data.matches)
+      ? data.matches
+      : [];
+
+  const target = data.target || (source === "gold" ? "prototype" : "gold");
+
+  return {
+    success: true,
+    source,
+    target,
+    model: modelName,
+    results: items.slice(0, topK).map((item) => {
+      const score = Number(item.score);
+      const similarity =
+        item.similarity_percent != null
+          ? Number(item.similarity_percent)
+          : Number.isFinite(score)
+            ? score <= 1
+              ? score * 100
+              : score
+            : null;
+
+      return {
+        ...item,
+        model: modelName,
+        source,
+        target,
+        matched_collection: item.matched_collection || target,
+        similarity_percent: similarity == null ? null : similarity,
+      };
+    }),
+  };
+}
+
+async function safelyMatchWithModel(modelUrl, image, source, topK, modelName) {
+  try {
+    return await matchWithModel(modelUrl, image, source, topK, modelName);
+  } catch (error) {
+    console.error(`${modelName} matching error:`, error);
+
+    return {
+      success: false,
+      source,
+      target: source === "gold" ? "prototype" : "gold",
+      model: modelName,
+      results: [],
+      error: error.message || `${modelName} is unavailable.`,
+    };
+  }
+}
+
+// ============================================================
+// AI JEWELLERY MATCHING — MODEL 1 + MODEL 2
+//
+// searchMode:
+//   all                 -> Both search directions
+//   gold_to_prototype   -> Gold image to Prototype catalogue
+//   prototype_to_gold   -> Prototype image to Gold catalogue
+//
+// Both models run independently.
+// Each model returns up to topK matches per direction.
+// ============================================================
+
+export async function matchJewellery(image, searchMode = "all", topK = 10) {
   if (!image) {
     throw new Error("Please upload or capture a jewellery image first.");
   }
@@ -333,74 +446,60 @@ export async function matchJewellery(image, searchMode = "all", topK = 12) {
     throw new Error("Please select a valid jewellery search mode.");
   }
 
-  async function matchBySource(source) {
-    const formData = new FormData();
+  const directions =
+    searchMode === "all"
+      ? [
+          { source: "gold", target: "prototype" },
+          { source: "prototype", target: "gold" },
+        ]
+      : [
+          {
+            source: searchMode === "gold_to_prototype" ? "gold" : "prototype",
+            target: searchMode === "gold_to_prototype" ? "prototype" : "gold",
+          },
+        ];
 
-    formData.append("image", image, image.name || "jewellery-image.jpg");
-    formData.append("source", source);
-    formData.append("top_k", String(topK));
-
-    const data = await fetchWithErrorHandling(MODEL_API_URL + "/api/match", {
-      method: "POST",
-      body: formData,
-    });
-
-    return {
-      ...data,
-      results: Array.isArray(data.results) ? data.results : [],
-    };
-  }
-
-  // Gold image -> find similar prototype designs.
-  if (searchMode === "gold_to_prototype") {
-    const data = await matchBySource("gold");
-
-    return {
-      ...data,
-      source: "gold",
-      target: "prototype",
-      results: data.results.map((item) => ({
-        ...item,
-        matched_collection: item.matched_collection || "prototype",
-      })),
-    };
-  }
-
-  // Prototype image -> find similar gold designs.
-  if (searchMode === "prototype_to_gold") {
-    const data = await matchBySource("prototype");
-
-    return {
-      ...data,
-      source: "prototype",
-      target: "gold",
-      results: data.results.map((item) => ({
-        ...item,
-        matched_collection: item.matched_collection || "gold",
-      })),
-    };
-  }
-
-  // Search both directions and combine the results.
-  const [goldData, prototypeData] = await Promise.all([
-    matchBySource("gold"),
-    matchBySource("prototype"),
+  const tasks = directions.flatMap(({ source }) => [
+    safelyMatchWithModel(MODEL_API_URL, image, source, topK, "Model 1"),
+    safelyMatchWithModel(MODEL2_API_URL, image, source, topK, "Model 2"),
   ]);
 
-  const goldResults = goldData.results.map((item) => ({
-    ...item,
-    matched_collection: item.matched_collection || "prototype",
-  }));
+  // Individual failures are caught inside safelyMatchWithModel.
+  const responses = await Promise.all(tasks);
 
-  const prototypeResults = prototypeData.results.map((item) => ({
-    ...item,
-    matched_collection: item.matched_collection || "gold",
-  }));
+  const model1 = [];
+  const model2 = [];
+  const errors = [];
+
+  for (const response of responses) {
+    if (response.model === "Model 1") {
+      model1.push(...response.results);
+    } else {
+      model2.push(...response.results);
+    }
+
+    if (response.error) {
+      errors.push({
+        model: response.model,
+        source: response.source,
+        message: response.error,
+      });
+    }
+  }
 
   return {
-    success: true,
-    source: "all",
-    results: [...goldResults, ...prototypeResults],
+    success: model1.length > 0 || model2.length > 0,
+    source: searchMode,
+
+    // Separate result sets for the React UI.
+    model1,
+    model2,
+
+    // Errors are reported separately, so one model can still work.
+    errors,
+
+    // Backwards compatibility for components using data.results.
+    results: [...model1, ...model2],
   };
 }
 
@@ -420,8 +519,7 @@ export async function getCatalogue({ collection = "all", search = "" } = {}) {
   }
 
   const query = params.toString();
-
-  const path = query ? "/api/catalogue?" + query : "/api/catalogue";
+  const path = query ? `/api/catalogue?${query}` : "/api/catalogue";
 
   return fetchWithErrorHandling(apiUrl(path));
 }
@@ -432,7 +530,7 @@ export async function getCatalogue({ collection = "all", search = "" } = {}) {
 
 export async function getCatalogueItem(id) {
   return fetchWithErrorHandling(
-    apiUrl("/api/catalogue/" + encodeURIComponent(id)),
+    apiUrl(`/api/catalogue/${encodeURIComponent(id)}`),
   );
 }
 
@@ -489,7 +587,7 @@ export async function updateJewellery({
   }
 
   return fetchWithErrorHandling(
-    apiUrl("/api/jewellery/" + encodeURIComponent(id)),
+    apiUrl(`/api/jewellery/${encodeURIComponent(id)}`),
     {
       method: "POST",
       body: formData,
@@ -503,7 +601,7 @@ export async function updateJewellery({
 
 export async function deleteJewellery(id) {
   return fetchWithErrorHandling(
-    apiUrl("/api/jewellery/" + encodeURIComponent(id)),
+    apiUrl(`/api/jewellery/${encodeURIComponent(id)}`),
     {
       method: "DELETE",
     },
