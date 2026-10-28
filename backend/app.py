@@ -49,6 +49,31 @@ app = Flask(
 CORS(app)
 
 
+@app.get("/api/debug/routes")
+def debug_routes():
+    return jsonify(
+        {
+            "success": True,
+            "application": __name__,
+            "routes": sorted(
+                [
+                    {
+                        "rule": str(rule),
+                        "methods": sorted(
+                            method
+                            for method in rule.methods
+                            if method not in {"HEAD", "OPTIONS"}
+                        ),
+                    }
+                    for rule in app.url_map.iter_rules()
+                    if rule.rule.startswith("/api/")
+                ],
+                key=lambda item: item["rule"],
+            ),
+        }
+    )
+
+
 # ============================================================
 # UPLOAD LIMIT
 # ============================================================
