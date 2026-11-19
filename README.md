@@ -643,7 +643,9 @@ The matching model API currently runs separately at
 `MATCH_API_UPSTREAM` setting. This keeps the browser on the Render HTTPS
 origin and avoids the browser blocking the old plain HTTP URL. The matching
 model itself must remain reachable at that upstream address; to move it fully
-onto Render, its service source and runtime files must also be deployed.
+onto Render, its service source and runtime files must also be deployed. The
+backend defaults `MATCH_API_UPSTREAM` to this address if the Render service
+does not define the variable.
 
 For a separate frontend deployment, set both Vite variables to the Render
 web service URL before building the frontend:

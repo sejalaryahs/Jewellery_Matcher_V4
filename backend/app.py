@@ -39,6 +39,8 @@ CORS(app)
 
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
+DEFAULT_MATCH_API_UPSTREAM = "http://46.202.167.86:5002"
+
 
 # ============================================================
 # MATCH API PROXY
@@ -46,7 +48,10 @@ app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 
 def match_api_url(path):
-    upstream_root = os.getenv("MATCH_API_UPSTREAM", "").rstrip("/")
+    upstream_root = os.getenv(
+        "MATCH_API_UPSTREAM",
+        DEFAULT_MATCH_API_UPSTREAM,
+    ).rstrip("/")
     return f"{upstream_root}/{path.lstrip('/')}"
 
 
@@ -55,17 +60,6 @@ def proxy_match_request():
     """Forward browser match uploads to the configured matching service."""
 
     upstream_url = match_api_url("/api/match")
-
-    if not os.getenv("MATCH_API_UPSTREAM"):
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Matching service is not configured.",
-                }
-            ),
-            503,
-        )
 
     try:
         upstream = requests.post(
@@ -86,9 +80,6 @@ def proxy_match_request():
 
 
 def proxy_match_asset(path):
-    if not os.getenv("MATCH_API_UPSTREAM"):
-        return jsonify({"success": False, "message": "Matching service is not configured."}), 503
-
     try:
         upstream = requests.get(match_api_url(path), timeout=(10, 60))
     except requests.RequestException:
