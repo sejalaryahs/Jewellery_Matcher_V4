@@ -14,7 +14,6 @@ import "../styles/catalogue.css";
 
 /* =========================================================
    JEWELLERY TYPES
-   Same list used by Add Jewellery
 ========================================================= */
 
 const JEWELLERY_TYPES = [
@@ -45,6 +44,10 @@ const JEWELLERY_TYPES = [
   "GCH",
 ];
 
+/* =========================================================
+   HELPER FUNCTIONS
+========================================================= */
+
 function getItemId(item) {
   return item?.design_id || item?.id || item?._id || "";
 }
@@ -65,18 +68,25 @@ function getItemDescription(item) {
   return item?.description || "";
 }
 
+function getItemImage(item) {
+  return item?.image_url || item?.image || item?.image_path || "";
+}
+
 /* =========================================================
    PAGE
 ========================================================= */
 
 function ManageJewelleryPage() {
   const [items, setItems] = useState([]);
+
   const [statistics, setStatistics] = useState({
     total: 0,
     gold: 0,
     prototype: 0,
   });
+
   const [search, setSearch] = useState("");
+
   const [collection, setCollection] = useState("all");
 
   const [loading, setLoading] = useState(true);
@@ -86,8 +96,7 @@ function ManageJewelleryPage() {
   const [success, setSuccess] = useState("");
 
   /*
-   * Selected item for the small
-   * Manage popup.
+   * Selected item for the manage popup.
    */
   const [managingItem, setManagingItem] = useState(null);
 
@@ -242,12 +251,9 @@ function ManageJewelleryPage() {
     setEditImage(null);
 
     /*
-     * Use the same image field that
-     * CatalogueCard understands.
+     * Use the image URL returned by the catalogue API.
      */
-    const image = item?.image_url || item?.image || item?.image_path || "";
-
-    setEditImagePreview(image);
+    setEditImagePreview(getItemImage(item));
 
     setManagingItem(null);
   }
@@ -262,7 +268,9 @@ function ManageJewelleryPage() {
     }
 
     setEditingItem(null);
+
     setEditImage(null);
+
     setEditImagePreview("");
   }
 
@@ -299,30 +307,27 @@ function ManageJewelleryPage() {
 
     if (!id) {
       setError("Jewellery ID is missing.");
-
       return;
     }
 
     if (!editName.trim()) {
       setError("Please enter the jewellery name.");
-
       return;
     }
 
     if (!editCollection) {
       setError("Please select a collection.");
-
       return;
     }
 
     if (!editType) {
       setError("Please select a jewellery type.");
-
       return;
     }
 
     try {
       setSaving(true);
+
       setError("");
 
       await updateJewellery({
@@ -337,14 +342,15 @@ function ManageJewelleryPage() {
       setSuccess("Jewellery updated successfully.");
 
       setEditingItem(null);
+
       setEditImage(null);
+
       setEditImagePreview("");
 
       await loadCatalogue();
 
       /*
-       * Keep success message visible
-       * briefly on the page.
+       * Keep success message visible briefly.
        */
       window.setTimeout(() => {
         setSuccess("");
@@ -367,6 +373,7 @@ function ManageJewelleryPage() {
     setSuccess("");
 
     setDeletingItem(item);
+
     setManagingItem(null);
   }
 
@@ -395,12 +402,12 @@ function ManageJewelleryPage() {
 
     if (!id) {
       setError("Jewellery ID is missing.");
-
       return;
     }
 
     try {
       setDeleting(true);
+
       setError("");
 
       await deleteJewellery(id);
@@ -441,8 +448,6 @@ function ManageJewelleryPage() {
             <span className="catalogue-eyebrow">JEWELLERY MANAGEMENT</span>
 
             <h1>Manage Jewellery</h1>
-
-            {/* <p>Search, edit or remove jewellery from your catalogue.</p> */}
           </div>
 
           <Link to="/add-jewellery" className="management-add-link">
@@ -481,6 +486,7 @@ function ManageJewelleryPage() {
         {success && (
           <div className="management-alert success">
             <span>✓</span>
+
             {success}
           </div>
         )}
@@ -492,6 +498,7 @@ function ManageJewelleryPage() {
         {error && (
           <div className="management-alert error">
             <span>!</span>
+
             {error}
           </div>
         )}
@@ -545,11 +552,6 @@ function ManageJewelleryPage() {
 
         {!loading && (
           <div className="management-results-summary">
-            {/* <span>
-              {filteredItems.length}{" "}
-              {filteredItems.length === 1 ? "jewellery" : "jewellery pieces"}
-            </span> */}
-
             {(search || collection !== "all") && (
               <button
                 type="button"
@@ -647,22 +649,20 @@ function ManageJewelleryPage() {
               ×
             </button>
 
+            {/* IMAGE */}
+
             <div className="management-detail-image">
-              {managingItem?.image_url ||
-              managingItem?.image ||
-              managingItem?.image_path ? (
+              {getItemImage(managingItem) ? (
                 <img
-                  src={
-                    managingItem.image_url ||
-                    managingItem.image ||
-                    managingItem.image_path
-                  }
+                  src={getItemImage(managingItem)}
                   alt={getItemName(managingItem)}
                 />
               ) : (
                 <div className="management-no-image">No image</div>
               )}
             </div>
+
+            {/* INFORMATION */}
 
             <div className="management-detail-info">
               <span className="management-detail-id">
@@ -690,6 +690,8 @@ function ManageJewelleryPage() {
                   {getItemDescription(managingItem)}
                 </p>
               )}
+
+              {/* ACTIONS */}
 
               <div className="management-detail-actions">
                 <button
@@ -727,6 +729,8 @@ function ManageJewelleryPage() {
           }}
         >
           <form className="management-edit-modal" onSubmit={handleSaveEdit}>
+            {/* HEADER */}
+
             <div className="management-edit-header">
               <div>
                 <span>EDIT JEWELLERY</span>
@@ -744,6 +748,8 @@ function ManageJewelleryPage() {
                 ×
               </button>
             </div>
+
+            {/* BODY */}
 
             <div className="management-edit-body">
               {/* IMAGE */}
@@ -764,6 +770,7 @@ function ManageJewelleryPage() {
                     type="file"
                     accept="image/*"
                     onChange={handleEditImageChange}
+                    disabled={saving}
                   />
                 </label>
               </div>
@@ -771,6 +778,8 @@ function ManageJewelleryPage() {
               {/* FIELDS */}
 
               <div className="management-edit-fields">
+                {/* NAME */}
+
                 <div className="management-field">
                   <label htmlFor="edit-name">Jewellery Name</label>
 
@@ -783,6 +792,8 @@ function ManageJewelleryPage() {
                     disabled={saving}
                   />
                 </div>
+
+                {/* COLLECTION */}
 
                 <div className="management-field">
                   <label htmlFor="edit-collection">Collection</label>
@@ -798,6 +809,8 @@ function ManageJewelleryPage() {
                     <option value="Prototype">Prototype</option>
                   </select>
                 </div>
+
+                {/* TYPE */}
 
                 <div className="management-field">
                   <label htmlFor="edit-type">Jewellery Type</label>
@@ -817,6 +830,8 @@ function ManageJewelleryPage() {
                     ))}
                   </select>
                 </div>
+
+                {/* DESCRIPTION */}
 
                 <div className="management-field management-field-full">
                   <label htmlFor="edit-description">Description</label>
@@ -886,6 +901,8 @@ function ManageJewelleryPage() {
               <br />
               This action cannot be undone.
             </p>
+
+            {/* ACTIONS */}
 
             <div className="delete-confirmation-actions">
               <button
