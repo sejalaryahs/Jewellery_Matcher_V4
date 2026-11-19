@@ -209,19 +209,25 @@ File:
 frontend/react/.env
 ```
 
-Local development:
+Local development (defaults are used when these variables are omitted):
 
 ``` env
-VITE_API_BASE_URL=http://127.0.0.1:5000
+VITE_CATALOGUE_API_URL=http://127.0.0.1:5000
+VITE_MATCH_API_URL=http://46.202.167.86:5002
 ```
 
-Render backend:
+For a separate production frontend, point both API URLs to the Render web
+service. When the React build is served by the same Render service, the
+production defaults use its own HTTPS origin:
 
 ``` env
-VITE_API_BASE_URL=https://jewellery-matcher-docker-v2.onrender.com
+VITE_CATALOGUE_API_URL=https://<your-render-service>.onrender.com
+VITE_MATCH_API_URL=https://<your-render-service>.onrender.com
 ```
 
-Restart Vite after changing `.env`.
+Set these variables in the frontend hosting provider if overriding the
+defaults. Rebuild/redeploy the frontend after changing them because Vite
+embeds `VITE_*` values into the built assets.
 
 ## Main pages
 
@@ -624,18 +630,27 @@ Catalogue Service       Matcher Service
                     Search Index / NPZ
 ```
 
-## Render backend
+## Deploy on Render
 
-The backend has previously been deployed to:
+This repository includes a `render.yaml` Blueprint and Dockerfile that deploy
+the React app and Flask API together as one Render web service. In Render,
+create a Blueprint from the Git repository and provide `SUPABASE_URL` and
+`SUPABASE_SECRET_KEY` when prompted. `SUPABASE_STORAGE_BUCKET` defaults to
+`jewellery-images`.
 
-``` text
-https://jewellery-matcher-docker-v2.onrender.com
-```
+The matching model API currently runs separately at
+`46.202.167.86:5002`. Render forwards `/api/match` to that service through the
+`MATCH_API_UPSTREAM` setting. This keeps the browser on the Render HTTPS
+origin and avoids the browser blocking the old plain HTTP URL. The matching
+model itself must remain reachable at that upstream address; to move it fully
+onto Render, its service source and runtime files must also be deployed.
 
-The React frontend can use this backend by setting:
+For a separate frontend deployment, set both Vite variables to the Render
+web service URL before building the frontend:
 
 ``` env
-VITE_API_BASE_URL=https://jewellery-matcher-docker-v2.onrender.com
+VITE_CATALOGUE_API_URL=https://<your-render-service>.onrender.com
+VITE_MATCH_API_URL=https://<your-render-service>.onrender.com
 ```
 
 The deployed backend should be tested independently before using it as

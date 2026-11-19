@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: jewelmatch-ai
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: jewellery-images
+      - key: MATCH_API_UPSTREAM
+        value: http://46.202.167.86:5002

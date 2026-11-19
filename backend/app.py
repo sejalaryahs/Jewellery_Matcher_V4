@@ -2,11 +2,14 @@
 # JEWELMATCH AI - SUPABASE BACKEND
 # ============================================================
 
+import os
 import traceback
 from pathlib import Path
 
+import requests
 from flask import (
     Flask,
+    Response,
     jsonify,
     request,
     send_from_directory,
@@ -35,6 +38,78 @@ app = Flask(__name__, static_folder=None)
 CORS(app)
 
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+
+
+# ============================================================
+# MATCH API PROXY
+# ============================================================
+
+
+def match_api_url(path):
+    upstream_root = os.getenv("MATCH_API_UPSTREAM", "").rstrip("/")
+    return f"{upstream_root}/{path.lstrip('/')}"
+
+
+@app.post("/api/match")
+def proxy_match_request():
+    """Forward browser match uploads to the configured matching service."""
+
+    upstream_url = match_api_url("/api/match")
+
+    if not os.getenv("MATCH_API_UPSTREAM"):
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Matching service is not configured.",
+                }
+            ),
+            503,
+        )
+
+    try:
+        upstream = requests.post(
+            upstream_url,
+            data=request.get_data(),
+            headers={"Content-Type": request.content_type or "application/octet-stream"},
+            timeout=(10, 280),
+        )
+    except requests.RequestException:
+        app.logger.exception("Matching service request failed")
+        return jsonify({"success": False, "message": "Matching service is unavailable."}), 502
+
+    return Response(
+        upstream.content,
+        status=upstream.status_code,
+        content_type=upstream.headers.get("Content-Type", "application/json"),
+    )
+
+
+def proxy_match_asset(path):
+    if not os.getenv("MATCH_API_UPSTREAM"):
+        return jsonify({"success": False, "message": "Matching service is not configured."}), 503
+
+    try:
+        upstream = requests.get(match_api_url(path), timeout=(10, 60))
+    except requests.RequestException:
+        app.logger.exception("Matching asset request failed")
+        return jsonify({"success": False, "message": "Matching service is unavailable."}), 502
+
+    return Response(
+        upstream.content,
+        status=upstream.status_code,
+        content_type=upstream.headers.get("Content-Type", "application/octet-stream"),
+    )
+
+
+@app.get("/catalogue-image/<path:image_path>")
+def proxy_match_catalogue_image(image_path):
+    return proxy_match_asset(f"/catalogue-image/{image_path}")
+
+
+@app.get("/catalogue/<path:image_path>")
+def proxy_match_catalogue_file(image_path):
+    return proxy_match_asset(f"/catalogue/{image_path}")
 
 
 # ============================================================
