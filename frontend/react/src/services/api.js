@@ -21,14 +21,16 @@ function trimTrailingSlash(url = "") {
 }
 
 const isDevelopment = import.meta.env.DEV;
+const PRODUCTION_API_URL = window.location.origin;
 
 export const MATCH_API_URL = trimTrailingSlash(
-  import.meta.env.VITE_MATCH_API_URL || "http://46.202.167.86:5002",
+  import.meta.env.VITE_MATCH_API_URL ||
+    (isDevelopment ? "http://46.202.167.86:5002" : PRODUCTION_API_URL),
 );
 
 export const CATALOGUE_API_URL = trimTrailingSlash(
   import.meta.env.VITE_CATALOGUE_API_URL ||
-    (isDevelopment ? "http://127.0.0.1:5000" : ""),
+    (isDevelopment ? "http://127.0.0.1:5000" : PRODUCTION_API_URL),
 );
 
 // ---------------------------------------------------------
